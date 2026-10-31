@@ -636,13 +636,18 @@ const sndBtn = $('#snd');
 const paintSnd = () => { sndBtn.textContent = isSoundOn() ? t('sound.on') : t('sound.off'); };
 sndBtn.onclick = () => { setSoundOn(!isSoundOn()); paintSnd(); };
 
-const langSel = $('#lang');
-langSel.innerHTML = LANGS.map(([code, short, name]) => `<option value="${code}">${short} · ${name}</option>`).join('');
-langSel.value = getLang();
-langSel.onchange = async () => {
-  const l = langSel.value;
+const langBox = $('#lang');
+function paintLangs() {
+  langBox.innerHTML = LANGS.map(([code, short, name]) => `<button class="lbtn ${code === getLang() ? 'on' : ''}" data-l="${code}" title="${name}" aria-label="${name}">${short}</button>`).join('');
+}
+paintLangs();
+langBox.onclick = async (e) => {
+  const b = e.target.closest('[data-l]');
+  if (!b || b.dataset.l === getLang()) return;
+  const l = b.dataset.l;
   setLang(l);
   await loadContent(l);
+  paintLangs();
   trackEvent('lang-' + l, 'Language: ' + l);
   relocalize();
 };

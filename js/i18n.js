@@ -1,7 +1,7 @@
 // UI translations (English, Brazilian Portuguese, French). Each entry is [en, pt, fr].
 // Famous-game content (titles, stories, comments) lives in js/i18n/games.<lang>.js and is loaded on demand.
-export const LANGS = [['en', 'EN', 'English'], ['pt', 'PT', 'Português (BR)'], ['fr', 'FR', 'Français']];
-const IDX = { en: 0, pt: 1, fr: 2 };
+export const LANGS = [['en', 'EN', 'English'], ['pt', 'PT', 'Português (BR)'], ['fr', 'FR', 'Français'], ['es', 'ES', 'Español']];
+const IDX = { en: 0, pt: 1, fr: 2, es: 3 };
 
 const D = {
   // navigation / chrome
@@ -294,7 +294,7 @@ try {
   if (saved && IDX[saved] !== undefined) lang = saved;
   else {
     const nav = (navigator.language || 'en').toLowerCase();
-    lang = nav.startsWith('pt') ? 'pt' : nav.startsWith('fr') ? 'fr' : 'en';
+    lang = nav.startsWith('pt') ? 'pt' : nav.startsWith('fr') ? 'fr' : nav.startsWith('es') ? 'es' : 'en';
   }
 } catch (e) { /* keep default */ }
 
@@ -309,7 +309,7 @@ document.documentElement.lang = lang === 'pt' ? 'pt-BR' : lang;
 
 export function t(key, vars) {
   const e = D[key];
-  let s = e ? (e[IDX[lang]] || e[0]) : key;
+  let s = lang === 'es' ? ((ES_UI && ES_UI[key]) || (e ? e[0] : key)) : (e ? (e[IDX[lang]] || e[0]) : key);
   if (vars) for (const [k, v] of Object.entries(vars)) s = s.split('{{' + k + '}}').join(v);
   return s;
 }
@@ -326,8 +326,10 @@ export function applyStatic(root = document) {
 
 /* ---- famous-game content (loaded on demand) ---- */
 let CONTENT = null;
+let ES_UI = null;
 export async function loadContent(l = lang) {
-  CONTENT = null;
+  CONTENT = null; ES_UI = null;
+  if (l === 'es') { ES_UI = (await import('./i18n/ui.es.js')).default; CONTENT = (await import('./i18n/games.es.js')).default; return; }
   if (l === 'pt') CONTENT = (await import('./i18n/games.pt.js')).default;
   else if (l === 'fr') CONTENT = (await import('./i18n/games.fr.js')).default;
 }
