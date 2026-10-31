@@ -4,16 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Gunmetal Chess</title>
+<meta name="description" content="Chess with gun-shaped pieces. Play the computer, challenge a friend online, or study famous games. English, Português, Français.">
+<meta property="og:title" content="Gunmetal Chess">
+<meta property="og:description" content="Chess with gun-shaped pieces. Play the computer, play a friend online, study famous games.">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="top">
   <a class="brand" href="#home">GUNMETAL <span>CHESS</span></a>
   <nav>
-    <a href="#home" data-nav="home">Home</a>
-    <a href="#play" data-nav="play">Play</a>
-    <a href="#library" data-nav="library">Famous Games</a>
-    <button class="snd" id="snd" title="Toggle sound effects">Sound: On</button>
+    <a href="#home" data-nav="home" data-i18n="nav.home">Home</a>
+    <a href="#play" data-nav="play" data-i18n="nav.play">Play</a>
+    <a href="#online" data-nav="online" data-i18n="nav.online">Play a Friend</a>
+    <a href="#library" data-nav="library" data-i18n="nav.library">Famous Games</a>
+    <select id="lang" class="langsel" data-i18n-title="lang.title" aria-label="Language"></select>
+    <button class="snd" id="snd" data-i18n-title="sound.title">Sound: On</button>
   </nav>
 </header>
 
@@ -21,13 +26,14 @@
   <!-- HOME -->
   <section id="view-home" class="view">
     <div class="hero">
-      <h1>Your move.</h1>
-      <p>Play the computer at three levels, or study the great games of history one move at a time.</p>
+      <h1 data-i18n="home.title">Your move.</h1>
+      <p data-i18n="home.sub">Play the computer, challenge a friend online, or study the great games of history one move at a time.</p>
     </div>
     <div class="home-cards">
-      <button class="home-card" id="home-new"><b>Play the Computer</b><span>Choose Easy, Medium or Hard.</span></button>
-      <button class="home-card" id="home-continue" hidden><b>Continue Game</b><span id="home-continue-sub"></span></button>
-      <a class="home-card" href="#library"><b>Famous Games</b><span>Watch the masters play, with a coach explaining each key move.</span></a>
+      <button class="home-card" id="home-new"><b data-i18n="home.computer.t">Play the Computer</b><span data-i18n="home.computer.s">Choose Easy, Medium or Hard.</span></button>
+      <a class="home-card" href="#online"><b data-i18n="home.online.t">Play a Friend Online</b><span data-i18n="home.online.s">Send a link and play in real time.</span></a>
+      <button class="home-card" id="home-continue" hidden><b data-i18n="home.continue.t">Continue Game</b><span id="home-continue-sub"></span></button>
+      <a class="home-card" href="#library"><b data-i18n="home.library.t">Famous Games</b><span data-i18n="home.library.s">Watch the masters play.</span></a>
     </div>
     <div class="pieces-strip" id="pieces-strip"></div>
   </section>
@@ -43,29 +49,88 @@
       <aside class="panel">
         <div class="status" id="play-status"></div>
         <div class="btn-row">
-          <button class="btn" id="btn-new">New Game</button>
-          <button class="btn" id="btn-undo">Take Back</button>
-          <button class="btn" id="btn-hint">Hint</button>
-          <button class="btn" id="btn-flip">Flip</button>
-          <button class="btn danger" id="btn-resign">Resign</button>
+          <button class="btn" id="btn-new" data-i18n="btn.new">New Game</button>
+          <button class="btn" id="btn-undo" data-i18n="btn.undo">Take Back</button>
+          <button class="btn" id="btn-hint" data-i18n="btn.hint">Hint</button>
+          <button class="btn" id="btn-flip" data-i18n="btn.flip">Flip</button>
+          <button class="btn danger" id="btn-resign" data-i18n="btn.resign">Resign</button>
         </div>
-        <h3>Moves</h3>
+        <h3 data-i18n="play.moves">Moves</h3>
         <div class="movelist" id="play-moves"></div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ONLINE (two players) -->
+  <section id="view-online" class="view hidden">
+    <div id="on-lobby">
+      <h2 class="page-title" data-i18n="on.title">Play a Friend Online</h2>
+      <p class="page-sub" data-i18n="on.sub"></p>
+      <div class="home-cards" style="margin-top:20px">
+        <div class="home-card static">
+          <b data-i18n="on.create">Create a game</b>
+          <span data-i18n="on.create.s"></span>
+          <div class="row3" id="on-color" style="margin-top:14px"></div>
+          <button class="btn primary" id="on-create" data-i18n="on.createBtn">Create game</button>
+        </div>
+        <div class="home-card static">
+          <b data-i18n="on.join">Join a game</b>
+          <span data-i18n="on.join.s"></span>
+          <input id="on-code" class="field code" maxlength="6" data-i18n-ph="on.codePh" autocomplete="off" autocapitalize="characters" style="margin-top:14px">
+          <button class="btn primary" id="on-join" data-i18n="on.joinBtn">Join</button>
+        </div>
+      </div>
+      <div class="imp-msg" id="on-msg"></div>
+      <p class="note" data-i18n="on.note"></p>
+    </div>
+
+    <div id="on-wait" hidden>
+      <h2 class="page-title" data-i18n="on.waiting">Waiting for your friend to join...</h2>
+      <div class="share-box">
+        <div class="lbl" data-i18n="on.share"></div>
+        <div class="linkrow"><input id="on-link" class="field" readonly><button class="btn primary" id="on-copy" data-i18n="on.copy">Copy link</button></div>
+        <div class="lbl" data-i18n="on.codeIs"></div>
+        <div class="bigcode" id="on-codeshow"></div>
+      </div>
+      <button class="btn" id="on-cancel" data-i18n="on.cancel">Cancel</button>
+    </div>
+
+    <div id="on-game" class="layout" hidden>
+      <div class="board-col">
+        <div class="player-bar" id="on-opp-bar"></div>
+        <div id="board-online"></div>
+        <div class="player-bar" id="on-me-bar"></div>
+      </div>
+      <aside class="panel">
+        <div class="status" id="on-status"></div>
+        <div class="draw-ask" id="on-ask" hidden></div>
+        <div class="btn-row">
+          <button class="btn" id="on-flip" data-i18n="btn.flip">Flip</button>
+          <button class="btn" id="on-draw" data-i18n="on.drawOffer">Offer draw</button>
+          <button class="btn danger" id="on-resign" data-i18n="btn.resign">Resign</button>
+          <button class="btn primary" id="on-rematch" data-i18n="on.rematch" hidden>Rematch</button>
+          <button class="btn" id="on-leave" data-i18n="on.leave">Leave game</button>
+        </div>
+        <h3 data-i18n="on.chat">Chat</h3>
+        <div class="chatbox" id="on-chatlog"></div>
+        <form class="chatform" id="on-chatform"><input id="on-chatin" class="field" maxlength="200" data-i18n-ph="on.chatPh" autocomplete="off"><button class="btn" data-i18n="on.send">Send</button></form>
+        <h3 data-i18n="on.moves">Moves</h3>
+        <div class="movelist" id="on-moves"></div>
       </aside>
     </div>
   </section>
 
   <!-- LIBRARY -->
   <section id="view-library" class="view hidden">
-    <h2 class="page-title">Famous Games</h2>
-    <p class="page-sub">Masters and Grandmasters, one move at a time. Watch with commentary, read the story behind each game, or test yourself by guessing the master's next move.</p>
+    <h2 class="page-title" data-i18n="lib.title">Famous Games</h2>
+    <p class="page-sub" data-i18n="lib.sub"></p>
 
-    <h3 class="sec">Collections</h3>
+    <h3 class="sec" data-i18n="lib.collections">Collections</h3>
     <div class="collections" id="collections"></div>
 
-    <h3 class="sec">Browse all games</h3>
+    <h3 class="sec" data-i18n="lib.browse">Browse all games</h3>
     <div class="lib-tools">
-      <input id="lib-search" type="search" placeholder="Search by title, player, opening, theme or story..." autocomplete="off">
+      <input id="lib-search" type="search" data-i18n-ph="lib.search" autocomplete="off">
       <div class="lib-filters">
         <select id="f-level" aria-label="Level"></select>
         <select id="f-era" aria-label="Era"></select>
@@ -76,16 +141,16 @@
         <select id="f-sort" aria-label="Sort by"></select>
       </div>
       <div class="lib-actions">
-        <button class="btn" id="f-fav">&#9733; Favorites</button>
-        <button class="btn" id="f-clear">Clear filters</button>
-        <button class="btn" id="btn-import">+ Import a game</button>
+        <button class="btn" id="f-fav">&#9733; <span data-i18n="lib.fav">Favorites</span></button>
+        <button class="btn" id="f-clear" data-i18n="lib.clear">Clear filters</button>
+        <button class="btn" id="btn-import" data-i18n="lib.import">+ Import a game</button>
       </div>
     </div>
     <div class="lib-count" id="lib-count"></div>
     <div class="lib-grid" id="lib-grid"></div>
 
-    <h3 class="sec">Legends of the game</h3>
-    <p class="page-sub" style="margin-top:0">Tap a name to see every game they played in this library.</p>
+    <h3 class="sec" data-i18n="lib.legends">Legends of the game</h3>
+    <p class="page-sub" style="margin-top:0" data-i18n="lib.legends.sub"></p>
     <div class="legends" id="legends"></div>
   </section>
 
@@ -95,37 +160,43 @@
       <div class="board-col">
         <div id="board-view"></div>
         <div class="controls">
-          <button class="btn" id="v-first" title="Start">&#9198;</button>
-          <button class="btn" id="v-prev" title="Previous">&#9664;</button>
-          <button class="btn primary" id="v-play" title="Auto-play">&#9654; Play</button>
-          <button class="btn" id="v-next" title="Next">&#9654;</button>
-          <button class="btn" id="v-last" title="End">&#9197;</button>
+          <button class="btn" id="v-first" data-i18n-title="v.start">&#9198;</button>
+          <button class="btn" id="v-prev" data-i18n-title="v.prev">&#9664;</button>
+          <button class="btn primary" id="v-play"></button>
+          <button class="btn" id="v-next" data-i18n-title="v.nextMove">&#9654;</button>
+          <button class="btn" id="v-last" data-i18n-title="v.end">&#9197;</button>
         </div>
       </div>
       <aside class="panel">
-        <div class="v-top"><a class="back" href="#library">&larr; All games</a><button class="fav-btn" id="v-fav" title="Add to favorites">&#9734;</button></div>
+        <div class="v-top"><a class="back" href="#library" data-i18n="v.back">&larr; All games</a><button class="fav-btn" id="v-fav">&#9734;</button></div>
         <h2 id="v-title"></h2>
         <div class="meta" id="v-meta"></div>
         <div class="mode-row">
-          <button class="btn mode on" id="mode-watch">Watch</button>
-          <button class="btn mode" id="mode-guess">Guess the move</button>
+          <button class="btn mode on" id="mode-watch" data-i18n="v.watch">Watch</button>
+          <button class="btn mode" id="mode-guess" data-i18n="v.guess">Guess the move</button>
         </div>
         <div class="coach" id="v-coach"></div>
         <div class="btn-row" id="guess-tools" hidden>
-          <button class="btn" id="g-hint">Hint</button>
-          <button class="btn" id="g-show">Show move</button>
-          <button class="btn" id="g-side">Playing: White</button>
+          <button class="btn" id="g-hint" data-i18n="g.hint">Hint</button>
+          <button class="btn" id="g-show" data-i18n="g.show">Show move</button>
+          <button class="btn" id="g-side"></button>
         </div>
-        <details class="story" id="v-story"><summary>The story behind this game</summary><div id="v-story-body"></div></details>
-        <h3>Moves</h3>
+        <details class="story" id="v-story"><summary data-i18n="v.story">The story behind this game</summary><div id="v-story-body"></div></details>
+        <h3 data-i18n="play.moves">Moves</h3>
         <div class="movelist" id="v-moves"></div>
-        <div class="btn-row" style="margin-top:14px"><button class="btn" id="v-nextgame">Next game &rarr;</button><button class="btn danger" id="v-remove" hidden>Remove imported game</button></div>
+        <div class="btn-row" style="margin-top:14px"><button class="btn" id="v-nextgame" data-i18n="v.next">Next game &rarr;</button><button class="btn danger" id="v-remove" data-i18n="v.remove" hidden>Remove imported game</button></div>
       </aside>
     </div>
   </section>
 </main>
 
+<footer class="foot">
+  <button class="link" id="share" data-i18n="ft.share">Share this game</button>
+  <span id="ft-stats" data-i18n="ft.stats" hidden></span>
+</footer>
+
 <div id="modal" class="modal hidden"><div class="modal-card" id="modal-card"></div></div>
+<script src="lib/peerjs.min.js"></script>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>

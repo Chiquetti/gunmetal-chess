@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 // Visual and sound effects: captures (explosion), check (crosshair + alert), checkmate (finale).
 const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -254,7 +255,7 @@ export class Effects {
     this.spawn({ type: 'ring', x: c.x, y: c.y, life: 0.9, r0: this.sq * 0.2, r1: this.sq * 2.6, col: '255,70,50' });
     this.run();
     this.flash('fx-vignette', 1000);
-    this.add(this.div('fx-banner-wrap', '<div class="fx-banner check">CHECK!</div>'), 1300);
+    this.add(this.div('fx-banner-wrap', `<div class="fx-banner check">${t('fx.check')}</div>`), 1300);
     sfx.check();
   }
 
@@ -277,7 +278,7 @@ export class Effects {
     [[200, -0.9, -0.6], [380, 0.9, -0.4], [560, -0.4, 0.8]].forEach(([ms, dx, dy]) =>
       setTimeout(() => this.explode(c.x + dx * cs.w, c.y + dy * cs.h, 1.3), ms));
     setTimeout(() => {
-      this.add(this.div('fx-banner-wrap long', `<div class="fx-banner mate">CHECKMATE</div><div class="fx-sub">${sub}</div>`), 4200);
+      this.add(this.div('fx-banner-wrap long', `<div class="fx-banner mate">${t('fx.mate')}</div><div class="fx-sub">${sub}</div>`), 4200);
       this.casings(80);
     }, 520);
   }

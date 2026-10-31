@@ -3,30 +3,30 @@ import { Board } from './board.js';
 import { Engine, LEVELS } from './engine.js';
 import { GAMES as BASE_GAMES, COLLECTIONS, LEGENDS } from './games.js';
 import { Effects, isSoundOn, setSoundOn } from './effects.js';
+import { t, tEnum, LANGS, getLang, setLang, applyStatic, loadContent, locGame, locCollection, locLegend } from './i18n.js';
+import { $, sleep, openModal, closeModal, askPromotion, capsHtml, capturedBy, lastMoveOf, renderMoves } from './ui.js';
+import { analyticsOn, trackView, trackEvent } from './analytics.js';
+import { enterOnline, refreshOnline } from './online.js';
 
-const $ = (s) => document.querySelector(s);
 const SAVE_KEY = 'gunmetal.game.v1';
-const PIECE_NAME = { k: 'King', q: 'Queen', r: 'Rook', b: 'Bishop', n: 'Knight', p: 'Pawn' };
 const strip = (s) => s.replace(/[!?+#]+$/g, '');
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-/* ---------------- modal helpers ---------------- */
-function openModal(html) {
-  $('#modal-card').innerHTML = html;
-  $('#modal').classList.remove('hidden');
-}
-function closeModal() { $('#modal').classList.add('hidden'); $('#modal-card').innerHTML = ''; }
+const lvLabel = (k) => t('lv.' + k);
 
 /* ---------------- router ---------------- */
-const views = ['home', 'play', 'library', 'viewer'];
+const views = ['home', 'play', 'online', 'library', 'viewer'];
+let currentView = 'home';
 function show(name) {
+  currentView = name;
   views.forEach((v) => $('#view-' + v).classList.toggle('hidden', v !== name));
   document.querySelectorAll('[data-nav]').forEach((a) => a.classList.toggle('on', a.dataset.nav === (name === 'viewer' ? 'library' : name)));
 }
 function route() {
   const h = location.hash.replace('#', '') || 'home';
   stopAutoplay();
+  trackView('/' + h, h);
   if (h.startsWith('game/')) { openViewer(h.slice(5)); return; }
+  if (h.startsWith('join/')) { show('online'); enterOnline(h.slice(5)); return; }
+  if (h === 'online') { show('online'); enterOnline(); return; }
   if (h === 'play') { show('play'); enterPlay(); return; }
   if (h === 'library') { show('library'); renderLibrary(); return; }
   show('home'); refreshHome();
@@ -35,30 +35,29 @@ window.addEventListener('hashchange', route);
 
 /* ================= PLAY vs COMPUTER ================= */
 let engine = null;
-const P = { chess: new Chess(), human: 'w', level: 'medium', over: false, thinking: false, started: false, token: 0 };
+const P = { chess: new Chess(), human: 'w', level: 'medium', over: false, thinking: false, started: false, token: 0, counted: false, resigned: false };
 
 const boardPlay = new Board($('#board-play'), {
   canPick: (sq, p) => P.started && !P.over && !P.thinking && p.color === P.human && P.chess.turn() === P.human,
   targetsFor: (sq) => P.chess.moves({ square: sq, verbose: true }).map((m) => m.to),
   onUserMove: (from, to) => userMove(from, to)
 });
-
 const fxPlay = new Effects(boardPlay);
 
-function saveGame() {
-  try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify({ pgn: P.chess.pgn(), human: P.human, level: P.level, over: P.over, ts: Date.now() }));
-  } catch (e) { /* storage unavailable */ }
-}
-function loadSaved() {
-  try { return JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); } catch (e) { return null; }
-}
+const LS = {
+  get(k, d) { try { const v = JSON.parse(localStorage.getItem(k)); return v === null || v === undefined ? d : v; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* ignore */ } }
+};
+
+function saveGame() { LS.set(SAVE_KEY, { pgn: P.chess.pgn(), human: P.human, level: P.level, over: P.over, ts: Date.now() }); }
+const loadSaved = () => LS.get(SAVE_KEY, null);
+
 function refreshHome() {
   const s = loadSaved();
   const btn = $('#home-continue');
   if (s && s.pgn && !s.over) {
     btn.hidden = false;
-    $('#home-continue-sub').textContent = `${LEVELS[s.level].label} level, playing ${s.human === 'w' ? 'White' : 'Black'}`;
+    $('#home-continue-sub').textContent = t('home.continue.s', { level: lvLabel(s.level), color: t('color.' + s.human) });
   } else btn.hidden = true;
 }
 
@@ -72,7 +71,7 @@ function enterPlay() {
 
 function restore(s) {
   P.chess = new Chess(); P.chess.loadPgn(s.pgn);
-  P.human = s.human; P.level = s.level; P.over = false; P.started = true; P.thinking = false;
+  P.human = s.human; P.level = s.level; P.over = false; P.started = true; P.thinking = false; P.counted = false;
   boardPlay.flipped = P.human === 'b'; boardPlay.build();
   updatePlay();
   if (P.chess.turn() !== P.human && !P.chess.isGameOver()) engineMove();
@@ -82,15 +81,15 @@ function openSetup() {
   let level = P.level, color = 'w';
   const render = () => {
     openModal(`
-      <h2>New Game</h2>
-      <p class="sub">Pick your opponent's strength and your color.</p>
+      <h2>${t('setup.title')}</h2>
+      <p class="sub">${t('setup.sub')}</p>
       <div class="opt-grid" id="lv">
-        ${Object.entries(LEVELS).map(([k, v]) => `<button class="opt ${k === level ? 'on' : ''}" data-lv="${k}"><b>${v.label}</b><small>${v.blurb}</small></button>`).join('')}
+        ${Object.keys(LEVELS).map((k) => `<button class="opt ${k === level ? 'on' : ''}" data-lv="${k}"><b>${lvLabel(k)}</b><small>${t('lv.' + k + '.b')}</small></button>`).join('')}
       </div>
       <div class="row3" id="cl">
-        ${[['w', 'White'], ['b', 'Black'], ['r', 'Random']].map(([k, n]) => `<button class="opt ${k === color ? 'on' : ''}" data-cl="${k}"><b>${n}</b></button>`).join('')}
+        ${['w', 'b', 'r'].map((k) => `<button class="opt ${k === color ? 'on' : ''}" data-cl="${k}"><b>${t('color.' + k)}</b></button>`).join('')}
       </div>
-      <div class="modal-actions"><button class="btn primary" id="go">Start Game</button></div>`);
+      <div class="modal-actions"><button class="btn primary" id="go">${t('setup.start')}</button></div>`);
     $('#lv').onclick = (e) => { const b = e.target.closest('[data-lv]'); if (b) { level = b.dataset.lv; render(); } };
     $('#cl').onclick = (e) => { const b = e.target.closest('[data-cl]'); if (b) { color = b.dataset.cl; render(); } };
     $('#go').onclick = () => { closeModal(); startGame(level, color === 'r' ? (Math.random() < 0.5 ? 'w' : 'b') : color); };
@@ -100,57 +99,50 @@ function openSetup() {
 
 function startGame(level, human) {
   P.token++;
-  P.chess = new Chess(); P.level = level; P.human = human; P.over = false; P.started = true; P.thinking = false;
+  P.chess = new Chess(); P.level = level; P.human = human; P.over = false; P.started = true; P.thinking = false; P.counted = false; P.resigned = false;
   boardPlay.flipped = human === 'b'; boardPlay.build(); boardPlay.hint = null;
   updatePlay(); saveGame();
+  trackEvent('game-start-' + level, 'Game vs computer started (' + level + ')');
   if (human === 'b') engineMove();
-}
-
-function lastMoveOf(chess) {
-  const h = chess.history({ verbose: true });
-  return h.length ? { from: h.at(-1).from, to: h.at(-1).to } : null;
-}
-
-function capturedBy(chess, color) {
-  // pieces captured BY `color` (i.e. opponent pieces lost)
-  return chess.history({ verbose: true }).filter((m) => m.color === color && m.captured).map((m) => m.captured);
-}
-const ORDER = ['q', 'r', 'b', 'n', 'p'];
-function capsHtml(types, color) {
-  return [...types].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b)).map((t) => `<img src="img/${color}${t}.png" alt="${PIECE_NAME[t]}">`).join('');
 }
 
 function updatePlay(fxMove = null) {
   const c = P.chess;
   fxPlay.reset();
   boardPlay.render(c, { last: lastMoveOf(c) });
-  if (fxMove) fxPlay.play(fxMove, c, { sub: fxMove.color === P.human ? 'You win!' : 'The computer wins' });
+  if (fxMove) fxPlay.play(fxMove, c, { sub: fxMove.color === P.human ? t('fx.youwin') : t('fx.compwins') });
   boardPlay.setHint(null);
   const opp = P.human === 'w' ? 'b' : 'w';
-  const lv = LEVELS[P.level];
-  $('#opp-bar').innerHTML = `<b>Computer</b> <span>${lv.label}</span><span class="caps">${capsHtml(capturedBy(c, opp), P.human)}</span>`;
-  $('#me-bar').innerHTML = `<b>You</b> <span>${P.human === 'w' ? 'White' : 'Black'}</span><span class="caps">${capsHtml(capturedBy(c, P.human), opp)}</span>`;
+  $('#opp-bar').innerHTML = `<b>${t('play.computer')}</b> <span>${lvLabel(P.level)}</span><span class="caps">${capsHtml(capturedBy(c, opp), P.human)}</span>`;
+  $('#me-bar').innerHTML = `<b>${t('play.you')}</b> <span>${t('color.' + P.human)}</span><span class="caps">${capsHtml(capturedBy(c, P.human), opp)}</span>`;
   renderMoves($('#play-moves'), c.history(), -1, null, false);
   let msg = '', cls = '';
   if (P.over || c.isGameOver()) { msg = resultText(); cls = 'over'; P.over = true; }
-  else if (P.thinking) { msg = 'Computer is thinking'; cls = 'thinking'; }
-  else msg = c.isCheck() ? 'Check! Your move.' : 'Your move.';
+  else if (P.thinking) { msg = t('status.thinking'); cls = 'thinking'; }
+  else msg = c.isCheck() ? t('status.check') : t('status.your');
   const st = $('#play-status'); st.className = 'status ' + cls; st.textContent = msg;
   $('#btn-undo').disabled = P.thinking || c.history().length === 0;
   $('#btn-hint').disabled = P.thinking || P.over || c.turn() !== P.human;
   $('#btn-resign').disabled = P.over;
-  if (P.over) { P.thinking = false; saveGame(); }
+  if (P.over) {
+    P.thinking = false; saveGame();
+    if (!P.counted) {
+      P.counted = true;
+      const won = P.resigned ? false : c.isCheckmate() ? c.turn() !== P.human : null;
+      trackEvent('game-end-' + (won === true ? 'win' : won === false ? 'loss' : 'draw'), 'Game vs computer ended');
+    }
+  }
 }
 
 function resultText() {
   const c = P.chess;
-  if (P.resigned) return 'You resigned. Computer wins.';
-  if (c.isCheckmate()) return c.turn() === P.human ? 'Checkmate. The computer wins.' : 'Checkmate! You win!';
-  if (c.isStalemate()) return 'Stalemate. The game is a draw.';
-  if (c.isThreefoldRepetition()) return 'Draw by repetition.';
-  if (c.isInsufficientMaterial()) return 'Draw: not enough material to mate.';
-  if (c.isDraw()) return 'Draw (50-move rule).';
-  return 'Game over.';
+  if (P.resigned) return t('res.resigned');
+  if (c.isCheckmate()) return c.turn() === P.human ? t('res.mateLose') : t('res.mateWin');
+  if (c.isStalemate()) return t('res.stalemate');
+  if (c.isThreefoldRepetition()) return t('res.repetition');
+  if (c.isInsufficientMaterial()) return t('res.insufficient');
+  if (c.isDraw()) return t('res.fifty');
+  return t('res.over');
 }
 
 async function userMove(from, to) {
@@ -164,14 +156,6 @@ async function userMove(from, to) {
   P.resigned = false;
   updatePlay(mv); saveGame();
   if (!c.isGameOver()) engineMove();
-}
-
-function askPromotion(color) {
-  return new Promise((resolve) => {
-    openModal(`<h2>Promote your pawn</h2><p class="sub">Choose a new piece.</p>
-      <div class="promo">${['q', 'r', 'b', 'n'].map((t) => `<button data-p="${t}" title="${PIECE_NAME[t]}"><img src="img/${color}${t}.png" alt="${PIECE_NAME[t]}"></button>`).join('')}</div>`);
-    $('#modal-card').onclick = (e) => { const b = e.target.closest('[data-p]'); if (b) { closeModal(); resolve(b.dataset.p); } };
-  });
 }
 
 async function engineMove() {
@@ -198,8 +182,7 @@ async function engineMove() {
   updatePlay(mv); saveGame();
 }
 
-$('#home-new').onclick = () => { location.hash = '#play'; P.started = false; enterPlayFresh(); };
-function enterPlayFresh() { setTimeout(() => { if (!engine) engine = new Engine(); openSetup(); }, 0); }
+$('#home-new').onclick = () => { location.hash = '#play'; P.started = false; setTimeout(() => { if (!engine) engine = new Engine(); openSetup(); }, 0); };
 $('#home-continue').onclick = () => {
   const s = loadSaved();
   if (!engine) engine = new Engine();
@@ -211,7 +194,7 @@ $('#btn-flip').onclick = () => boardPlay.flip();
 $('#btn-undo').onclick = () => {
   if (P.thinking) return;
   const c = P.chess;
-  P.token++; P.over = false; P.resigned = false;
+  P.token++; P.over = false; P.resigned = false; P.counted = false;
   c.undo();
   if (c.turn() !== P.human && c.history().length > 0) c.undo();
   updatePlay(); saveGame();
@@ -219,42 +202,21 @@ $('#btn-undo').onclick = () => {
 };
 $('#btn-hint').onclick = async () => {
   if (P.thinking || P.over || P.chess.turn() !== P.human) return;
-  const btn = $('#btn-hint'); btn.disabled = true; btn.textContent = 'Thinking...';
+  const btn = $('#btn-hint'); btn.disabled = true; btn.textContent = t('hint.thinking');
   try {
     const uci = await engine.bestMove(P.chess.fen(), { skill: 20, movetime: 700 });
     if (uci) boardPlay.setHint(uci.slice(0, 2), uci.slice(2, 4));
   } catch (e) { /* ignore */ }
-  btn.textContent = 'Hint'; btn.disabled = false;
+  btn.textContent = t('btn.hint'); btn.disabled = false;
 };
 $('#btn-resign').onclick = () => {
-  openModal(`<h2>Resign this game?</h2><p class="sub">The computer will be declared the winner.</p>
-    <div class="modal-actions"><button class="btn" id="no">Keep playing</button><button class="btn danger" id="yes">Resign</button></div>`);
+  openModal(`<h2>${t('resign.title')}</h2><p class="sub">${t('resign.sub')}</p>
+    <div class="modal-actions"><button class="btn" id="no">${t('resign.keep')}</button><button class="btn danger" id="yes">${t('resign.confirm')}</button></div>`);
   $('#no').onclick = closeModal;
   $('#yes').onclick = () => { closeModal(); P.token++; P.thinking = false; P.over = true; P.resigned = true; updatePlay(); };
 };
 
-/* ---- move list renderer (shared) ---- */
-function renderMoves(el, sans, curIdx, commentSet, clickable) {
-  let html = '';
-  for (let i = 0; i < sans.length; i += 2) {
-    html += `<div class="n">${i / 2 + 1}.</div>`;
-    for (let j = i; j < Math.min(i + 2, sans.length); j++) {
-      html += `<div class="m ${j === curIdx ? 'cur' : ''} ${commentSet && commentSet.has(j) ? 'has' : ''}" data-i="${j}">${sans[j]}</div>`;
-    }
-    if (i + 1 >= sans.length) html += '<div></div>';
-  }
-  el.className = 'movelist' + (clickable ? ' click' : '');
-  el.innerHTML = html;
-  const cur = el.querySelector('.cur');
-  if (cur) el.scrollTop = Math.max(0, cur.offsetTop - el.clientHeight / 2);
-  else el.scrollTop = el.scrollHeight;
-}
-
 /* ================= LIBRARY ================= */
-const LS = {
-  get(k, d) { try { const v = JSON.parse(localStorage.getItem(k)); return v === null || v === undefined ? d : v; } catch (e) { return d; } },
-  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* ignore */ } }
-};
 let imported = LS.get('gunmetal.imported', []);
 const favs = new Set(LS.get('gunmetal.fav', []));
 const done = new Set(LS.get('gunmetal.done', []));
@@ -262,8 +224,7 @@ const saveFavs = () => LS.set('gunmetal.fav', [...favs]);
 const saveDone = () => LS.set('gunmetal.done', [...done]);
 
 const LEVEL_RANK = { Beginner: 0, Intermediate: 1, Advanced: 2, Custom: 3 };
-const FIRST_LABEL = { '1.e4': '1.e4 (King\'s pawn)', '1.d4': '1.d4 (Queen\'s pawn)', Flank: 'Flank (1.c4 / 1.Nf3)', Other: 'Other first moves' };
-const RESULT_LABEL = { w: 'White wins', b: 'Black wins', d: 'Draw' };
+const FIRST_KEYS = ['1.e4', '1.d4', 'Flank', 'Other'];
 const resultKey = (r) => (r === '1-0' ? 'w' : r === '0-1' ? 'b' : r === '1/2-1/2' ? 'd' : '');
 
 function prep(g) {
@@ -277,9 +238,7 @@ function prep(g) {
   return { ...g, plies: h.length, moveCount: Math.ceil(h.length / 2), mate: c.isCheckmate(), first, themes: [...themes] };
 }
 let GAMES = [];
-function rebuildGames() {
-  GAMES = [...BASE_GAMES, ...imported].map(prep).filter(Boolean);
-}
+function rebuildGames() { GAMES = [...BASE_GAMES, ...imported].map(prep).filter(Boolean); }
 rebuildGames();
 
 const L = { q: '', level: '', era: '', theme: '', player: '', result: '', first: '', sort: 'rec', fav: false, collection: '' };
@@ -287,25 +246,24 @@ const L = { q: '', level: '', era: '', theme: '', player: '', result: '', first:
 function fillSelect(id, first, items) {
   const el = $(id);
   const cur = el.value;
-  el.innerHTML = `<option value="">${first}</option>` + items.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
+  el.innerHTML = `<option value="">${first}</option>` + items.map(([v, label]) => `<option value="${v}">${label}</option>`).join('');
   el.value = cur;
 }
 function setupFilters() {
   const levels = ['Beginner', 'Intermediate', 'Advanced', ...(GAMES.some((g) => g.level === 'Custom') ? ['Custom'] : [])];
-  fillSelect('#f-level', 'All levels', levels.map((x) => [x, x]));
+  fillSelect('#f-level', t('f.level'), levels.map((x) => [x, tEnum('level', x)]));
   const eras = ['Timeless', 'Romantic', 'Classical', 'Modern', ...(GAMES.some((g) => g.era === 'Custom') ? ['Custom'] : [])];
-  fillSelect('#f-era', 'All eras', eras.map((x) => [x, x]));
-  const themes = [...new Set(GAMES.flatMap((g) => g.themes))].sort();
-  fillSelect('#f-theme', 'All themes', themes.map((x) => [x, x]));
+  fillSelect('#f-era', t('f.era'), eras.map((x) => [x, tEnum('era', x)]));
+  const themes = [...new Set(GAMES.flatMap((g) => g.themes))].sort((a, b) => tEnum('theme', a).localeCompare(tEnum('theme', b)));
+  fillSelect('#f-theme', t('f.theme'), themes.map((x) => [x, tEnum('theme', x)]));
   const players = [...new Set(GAMES.flatMap((g) => g.players || []))].sort();
-  fillSelect('#f-player', 'All players', players.map((x) => [x, x]));
-  fillSelect('#f-result', 'All results', Object.entries(RESULT_LABEL));
-  fillSelect('#f-first', 'Any first move', Object.entries(FIRST_LABEL));
+  fillSelect('#f-player', t('f.player'), players.map((x) => [x, x]));
+  fillSelect('#f-result', t('f.result'), ['w', 'b', 'd'].map((k) => [k, t('res.' + k)]));
+  fillSelect('#f-first', t('f.first'), FIRST_KEYS.map((k) => [k, t('first.' + k)]));
   const sortEl = $('#f-sort');
-  if (!sortEl.options.length) {
-    sortEl.innerHTML = [['rec', 'Sort: Recommended'], ['easy', 'Easiest first'], ['hard', 'Hardest first'], ['old', 'Oldest first'], ['new', 'Newest first'], ['short', 'Shortest first'], ['long', 'Longest first'], ['az', 'A to Z']]
-      .map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
-  }
+  const cur = sortEl.value || L.sort;
+  sortEl.innerHTML = ['rec', 'easy', 'hard', 'old', 'new', 'short', 'long', 'az'].map((v) => `<option value="${v}">${t('sort.' + v)}</option>`).join('');
+  sortEl.value = cur;
 }
 
 function filteredGames() {
@@ -321,7 +279,8 @@ function filteredGames() {
     if (L.fav && !favs.has(g.id)) return false;
     if (col && !col.games.includes(g.id)) return false;
     if (q) {
-      const hay = [g.title, g.white, g.black, g.event, g.year, g.opening, g.level, g.era, g.themes.join(' '), g.intro, (g.story || []).join(' ')].join(' ').toLowerCase();
+      const lg = locGame(g);
+      const hay = [lg.title, lg.white, lg.black, lg.event, lg.year, lg.opening, tEnum('level', g.level), tEnum('era', g.era), g.themes.map((x) => tEnum('theme', x)).join(' '), lg.intro, (lg.story || []).join(' ')].join(' ').toLowerCase();
       if (!q.split(/\s+/).every((w) => hay.includes(w))) return false;
     }
     return true;
@@ -334,7 +293,7 @@ function filteredGames() {
     hard: (a, b) => LEVEL_RANK[b.level] - LEVEL_RANK[a.level] || idx(a) - idx(b),
     old: (a, b) => yr(a) - yr(b), new: (a, b) => yr(b) - yr(a),
     short: (a, b) => a.moveCount - b.moveCount, long: (a, b) => b.moveCount - a.moveCount,
-    az: (a, b) => a.title.localeCompare(b.title)
+    az: (a, b) => locGame(a).title.localeCompare(locGame(b).title)
   };
   return list.sort(sorts[L.sort] || sorts.rec);
 }
@@ -343,35 +302,37 @@ function renderLibrary() {
   setupFilters();
   const list = filteredGames();
   const col = L.collection ? COLLECTIONS.find((c) => c.id === L.collection) : null;
-  $('#lib-count').innerHTML = `Showing <b>${list.length}</b> of ${GAMES.length} games` +
-    (col ? ` &middot; Collection: <b>${col.title}</b> <button class="link" id="clr-col">remove</button>` : '');
+  $('#lib-count').innerHTML = t('lib.count', { n: list.length, total: GAMES.length }) +
+    (col ? ` &middot; ${t('lib.collection')}: <b>${locCollection(col).title}</b> <button class="link" id="clr-col">${t('lib.remove')}</button>` : '');
   $('#f-fav').classList.toggle('on', L.fav);
-  $('#lib-grid').innerHTML = list.length ? list.map(cardHtml).join('') :
-    `<div class="empty">No games match these filters. Try clearing a filter or searching for something else.</div>`;
-  $('#collections').innerHTML = COLLECTIONS.map((c) => `
-    <button class="col-card ${L.collection === c.id ? 'on' : ''}" data-col="${c.id}">
-      <b>${c.title}</b><span>${c.blurb}</span><em>${c.games.length} games</em>
-    </button>`).join('');
-  $('#legends').innerHTML = LEGENDS.map((p) => {
+  $('#lib-grid').innerHTML = list.length ? list.map(cardHtml).join('') : `<div class="empty">${t('lib.empty')}</div>`;
+  $('#collections').innerHTML = COLLECTIONS.map((c0) => {
+    const c = locCollection(c0);
+    return `<button class="col-card ${L.collection === c.id ? 'on' : ''}" data-col="${c.id}">
+      <b>${c.title}</b><span>${c.blurb}</span><em>${t('lib.gamesN', { n: c.games.length })}</em></button>`;
+  }).join('');
+  $('#legends').innerHTML = LEGENDS.map((p0) => {
+    const p = locLegend(p0);
     const n = GAMES.filter((g) => (g.players || []).includes(p.name)).length;
     return `<div class="legend"><div class="lg-name">${p.name}</div><div class="lg-line">${p.line}</div>
       <div class="lg-meta">${p.years} &middot; ${p.from}</div><p>${p.bio}</p>
-      ${n ? `<button class="btn" data-player="${p.name}">${n} game${n > 1 ? 's' : ''} in library</button>` : ''}</div>`;
+      ${n ? `<button class="btn" data-player="${p.name}">${n > 1 ? t('lib.legendMany', { n }) : t('lib.legendOne')}</button>` : ''}</div>`;
   }).join('');
 }
 
-function cardHtml(g) {
+function cardHtml(g0) {
+  const g = locGame(g0);
   const isFav = favs.has(g.id), isDone = done.has(g.id);
-  const when = [g.era && g.era !== 'Custom' ? g.era : '', g.year].filter(Boolean).join(' &middot; ');
+  const when = [g.era && g.era !== 'Custom' ? tEnum('era', g.era) : '', g.year].filter(Boolean).join(' &middot; ');
   return `<div class="g-card" data-id="${g.id}" tabindex="0">
-    <div class="g-head"><span class="badge ${g.level}">${g.level}</span><span class="g-era">${when}</span>
-      <button class="fav-btn ${isFav ? 'on' : ''}" data-fav="${g.id}" title="${isFav ? 'Remove from favorites' : 'Add to favorites'}">${isFav ? '&#9733;' : '&#9734;'}</button></div>
+    <div class="g-head"><span class="badge ${g.level}">${tEnum('level', g.level)}</span><span class="g-era">${when}</span>
+      <button class="fav-btn ${isFav ? 'on' : ''}" data-fav="${g.id}" title="${isFav ? t('fav.remove') : t('fav.add')}">${isFav ? '&#9733;' : '&#9734;'}</button></div>
     <h3>${g.title}</h3>
     <div class="pl">${g.white} <span style="color:var(--muted)">vs</span> ${g.black}</div>
     <div class="ev">${[g.event, g.opening].filter(Boolean).join(' &middot; ')}</div>
     <p>${(g.intro || '').split('. ')[0].replace(/\.$/, '')}.</p>
-    <div class="tags"><span class="tag">${g.moveCount} moves</span><span class="tag">${RESULT_LABEL[resultKey(g.result)] || 'Result ' + g.result}</span>
-      ${g.themes.slice(0, 3).map((t) => `<span class="tag">${t}</span>`).join('')}${g.story && g.story.length ? '<span class="tag story">Story</span>' : ''}${isDone ? '<span class="tag done">Watched &#10003;</span>' : ''}</div>
+    <div class="tags"><span class="tag">${t('card.moves', { n: g0.moveCount })}</span><span class="tag">${t('res.' + resultKey(g.result)) === 'res.' ? g.result : t('res.' + resultKey(g.result))}</span>
+      ${g0.themes.slice(0, 3).map((x) => `<span class="tag">${tEnum('theme', x)}</span>`).join('')}${g.story && g.story.length ? `<span class="tag story">${t('tag.story')}</span>` : ''}${isDone ? `<span class="tag done">${t('tag.done')}</span>` : ''}</div>
   </div>`;
 }
 
@@ -409,105 +370,108 @@ $('#f-clear').onclick = () => {
   renderLibrary(); syncControls();
 };
 
-function toggleFav(id) {
-  if (favs.has(id)) favs.delete(id); else favs.add(id);
-  saveFavs();
-}
-function markDone(id) {
-  if (!done.has(id)) { done.add(id); saveDone(); }
-}
+function toggleFav(id) { if (favs.has(id)) favs.delete(id); else favs.add(id); saveFavs(); }
+function markDone(id) { if (!done.has(id)) { done.add(id); saveDone(); trackEvent('game-watched', 'Famous game finished'); } }
 
 /* ---- import a game ---- */
 $('#btn-import').onclick = () => {
-  openModal(`<h2>Import a game</h2>
-    <p class="sub">Paste a game in PGN format (chess.com and Lichess both let you copy it). It is saved only in this browser.</p>
-    <input id="imp-title" class="field" placeholder="Title (optional)">
+  openModal(`<h2>${t('imp.title')}</h2>
+    <p class="sub">${t('imp.sub')}</p>
+    <input id="imp-title" class="field" placeholder="${t('imp.titlePh')}">
     <textarea id="imp-pgn" class="field" rows="8" placeholder='[Event "My game"]&#10;[White "Me"]&#10;[Black "Computer"]&#10;&#10;1. e4 e5 2. Nf3 Nc6 ...'></textarea>
     <div class="imp-msg" id="imp-msg"></div>
-    <div class="modal-actions"><button class="btn" id="imp-cancel">Cancel</button><button class="btn primary" id="imp-save">Import</button></div>`);
+    <div class="modal-actions"><button class="btn" id="imp-cancel">${t('imp.cancel')}</button><button class="btn primary" id="imp-save">${t('imp.go')}</button></div>`);
   $('#imp-cancel').onclick = closeModal;
   $('#imp-save').onclick = () => {
     const text = $('#imp-pgn').value.trim();
     const c = new Chess();
-    try { c.loadPgn(text); } catch (e) { $('#imp-msg').textContent = 'That does not look like a valid PGN. Check the moves and try again.'; return; }
-    if (!c.history().length) { $('#imp-msg').textContent = 'No moves found in that text.'; return; }
+    try { c.loadPgn(text); } catch (e) { $('#imp-msg').textContent = t('imp.errInvalid'); return; }
+    if (!c.history().length) { $('#imp-msg').textContent = t('imp.errNone'); return; }
     let h = {};
     try { h = c.header() || {}; } catch (e) { h = {}; }
     const clean = (s, d) => (s && s !== '?' ? s : d);
-    const white = clean(h.White, 'White'), black = clean(h.Black, 'Black');
+    const white = clean(h.White, t('color.w')), black = clean(h.Black, t('color.b'));
     const year = (h.Date || '').slice(0, 4);
     imported.push({
       id: 'imp-' + Date.now().toString(36),
       title: $('#imp-title').value.trim() || `${white} vs ${black}`,
-      white, black, event: clean(h.Event, 'Imported game'), year: /^\d{4}$/.test(year) ? year : '', era: 'Custom',
-      result: clean(h.Result, '*'), level: 'Custom', opening: clean(h.Opening, ''), players: [white, black].filter((n) => n !== 'White' && n !== 'Black'),
-      tags: ['Imported'], intro: 'Your imported game. Step through the moves, or switch to Guess the move to test yourself.', lesson: '', story: [], pgn: text, comments: {}, imported: true
+      white, black, event: clean(h.Event, t('imp.event')), year: /^\d{4}$/.test(year) ? year : '', era: 'Custom',
+      result: clean(h.Result, '*'), level: 'Custom', opening: clean(h.Opening, ''), players: [white, black].filter((n) => n !== t('color.w') && n !== t('color.b')),
+      tags: ['Imported'], intro: t('imp.intro'), lesson: '', story: [], pgn: text, comments: {}, imported: true
     });
     LS.set('gunmetal.imported', imported);
+    trackEvent('import-game', 'Game imported');
     rebuildGames(); closeModal(); renderLibrary();
     location.hash = '#game/' + imported.at(-1).id;
   };
 };
 
 /* ================= GAME VIEWER ================= */
-const V = { game: null, moves: [], fens: [], comments: new Map(), idx: 0, mode: 'watch', side: 'w', timer: null, tries: 0, firstTry: 0, hinted: false, guessable: 0, busy: false };
+const V = { game: null, raw: null, moves: [], fens: [], comments: new Map(), idx: 0, mode: 'watch', side: 'w', timer: null, tries: 0, firstTry: 0, hinted: false, guessable: 0, busy: false };
 
 const boardView = new Board($('#board-view'), {
   canPick: (sq, p) => V.mode === 'guess' && !V.busy && V.moves[V.idx] && V.moves[V.idx].color === V.side && p.color === V.side,
   targetsFor: (sq) => new Chess(V.fens[V.idx]).moves({ square: sq, verbose: true }).map((m) => m.to),
   onUserMove: (from, to) => guessMove(from, to)
 });
-
 const fxView = new Effects(boardView);
 
 function openViewer(id) {
-  const g = GAMES.find((x) => x.id === id);
-  if (!g) { location.hash = '#library'; return; }
+  const raw = GAMES.find((x) => x.id === id);
+  if (!raw) { location.hash = '#library'; return; }
   show('viewer');
-  V.game = g;
-  const c = new Chess(); c.loadPgn(g.pgn);
+  V.raw = raw;
+  const c = new Chess(); c.loadPgn(raw.pgn);
   V.moves = c.history({ verbose: true });
   V.fens = [V.moves.length ? V.moves[0].before : new Chess().fen(), ...V.moves.map((m) => m.after)];
+  V.idx = 0; V.mode = 'watch'; V.side = 'w'; V.tries = 0; V.firstTry = 0; V.busy = false;
+  boardView.flipped = false; boardView.build();
+  localizeViewer();
+  setMode('watch');
+}
+
+/** (Re)apply the current language to the viewer's static parts and comments. */
+function localizeViewer() {
+  const g = locGame(V.raw);
+  V.game = g;
   V.comments = new Map();
   const norm = new Map(Object.entries(g.comments).map(([k, v]) => [strip(k), v]));
   V.moves.forEach((m, i) => {
     const key = (m.color === 'w' ? `${i / 2 + 1}.` : `${Math.floor(i / 2) + 1}...`) + strip(m.san);
     if (norm.has(key)) V.comments.set(i, norm.get(key));
   });
-  V.idx = 0; V.mode = 'watch'; V.side = 'w'; V.tries = 0; V.firstTry = 0; V.busy = false;
-  boardView.flipped = false; boardView.build();
   $('#v-title').textContent = g.title;
-  $('#v-meta').innerHTML = `<b>${g.white}</b> vs <b>${g.black}</b><br>${g.event}${g.year ? ', ' + g.year : ''} &middot; Result ${g.result} &middot; ${g.level}` +
-    `<br>${[g.opening, g.moveCount + ' moves'].filter(Boolean).join(' &middot; ')}`;
+  $('#v-meta').innerHTML = `<b>${g.white}</b> vs <b>${g.black}</b><br>${g.event}${g.year ? ', ' + g.year : ''} &middot; ${t('resultWord')} ${g.result} &middot; ${tEnum('level', g.level)}` +
+    `<br>${[g.opening, t('card.moves', { n: V.raw.moveCount })].filter(Boolean).join(' &middot; ')}`;
   const hasStory = g.story && g.story.length;
   $('#v-story').hidden = !hasStory;
-  $('#v-story').open = false;
   $('#v-story-body').innerHTML = hasStory ? g.story.map((p) => `<p>${p}</p>`).join('') : '';
   $('#v-remove').hidden = !g.imported;
-  paintFav();
-  setMode('watch');
+  $('#g-side').textContent = t('g.side', { c: t('color.' + V.side) });
+  paintFav(); stopAutoplay();
 }
 
 function moveLabel(i) {
   const m = V.moves[i];
   return (m.color === 'w' ? `${i / 2 + 1}. ` : `${Math.floor(i / 2) + 1}... `) + m.san;
 }
+const HR = '<hr style="border:0;border-top:1px solid var(--line);margin:10px 0">';
 
 function renderViewer(extraHtml = '', fxMove = null) {
   const last = V.idx > 0 ? { from: V.moves[V.idx - 1].from, to: V.moves[V.idx - 1].to } : null;
   fxView.reset();
   const pos = new Chess(V.fens[V.idx]);
   boardView.render(pos, { last });
-  if (fxMove) fxView.play(fxMove, pos, { sub: fxMove.color === 'w' ? 'White wins' : 'Black wins' });
+  if (fxMove) fxView.play(fxMove, pos, { sub: fxMove.color === 'w' ? t('fx.white') : t('fx.black') });
   boardView.setHint(null);
   renderMoves($('#v-moves'), V.moves.map((m) => m.san), V.idx - 1, new Set(V.comments.keys()), V.mode === 'watch');
   let html;
-  if (V.idx === 0) html = `<div class="mv">Introduction</div>${V.game.intro}`;
+  if (V.idx === 0) html = `<div class="mv">${t('v.intro')}</div>${V.game.intro}`;
   else {
     const i = V.idx - 1;
-    html = `<div class="mv">${moveLabel(i)}</div>${V.comments.get(i) || '<span style="color:var(--muted)">A natural move that continues the plan.</span>'}`;
+    html = `<div class="mv">${moveLabel(i)}</div>${V.comments.get(i) || `<span style="color:var(--muted)">${t('v.natural')}</span>`}`;
     if (V.idx === V.moves.length) {
-      html += `<hr style="border:0;border-top:1px solid var(--line);margin:10px 0"><b>Result ${V.game.result}.</b> ${V.game.lesson || ''}`;
+      html += `${HR}<b>${t('v.result', { r: V.game.result })}</b> ${V.game.lesson || ''}`;
       markDone(V.game.id);
     }
   }
@@ -530,7 +494,7 @@ $('#v-moves').onclick = (e) => { const m = e.target.closest('[data-i]'); if (m &
 $('#v-play').onclick = () => {
   if (V.timer) { stopAutoplay(); return; }
   if (V.idx >= V.moves.length) goTo(0);
-  $('#v-play').innerHTML = '&#10074;&#10074; Pause';
+  $('#v-play').innerHTML = t('v.pause');
   V.timer = setInterval(() => {
     if (V.idx >= V.moves.length) { stopAutoplay(); return; }
     goTo(V.idx + 1);
@@ -538,7 +502,7 @@ $('#v-play').onclick = () => {
 };
 function stopAutoplay() {
   if (V.timer) { clearInterval(V.timer); V.timer = null; }
-  const b = $('#v-play'); if (b) b.innerHTML = '&#9654; Play';
+  const b = $('#v-play'); if (b) b.innerHTML = t('v.play');
 }
 document.addEventListener('keydown', (e) => {
   if ($('#view-viewer').classList.contains('hidden') || V.mode !== 'watch' || !$('#modal').classList.contains('hidden')) return;
@@ -558,8 +522,9 @@ function setMode(mode) {
   V.idx = 0; V.tries = 0; V.firstTry = 0; V.hinted = false; V.busy = false;
   V.guessable = V.moves.filter((m) => m.color === V.side).length;
   boardView.flipped = V.side === 'b'; boardView.build();
-  $('#g-side').textContent = 'Playing: ' + (V.side === 'w' ? 'White' : 'Black');
-  renderViewer(`<div class="mv" style="color:var(--text)">Guess the move</div>You play ${V.side === 'w' ? 'White' : 'Black'}. Find the master's move each turn.<hr style="border:0;border-top:1px solid var(--line);margin:10px 0">`);
+  $('#g-side').textContent = t('g.side', { c: t('color.' + V.side) });
+  trackEvent('guess-mode', 'Guess the move started');
+  renderViewer(`<div class="mv" style="color:var(--text)">${t('g.title')}</div>${t('g.intro', { c: t('color.' + V.side) })}${HR}`);
   guessAdvance();
 }
 $('#mode-watch').onclick = () => setMode('watch');
@@ -578,14 +543,11 @@ async function guessAdvance() {
   V.busy = false;
   if (V.idx >= V.moves.length) {
     markDone(V.game.id);
-    const msg = `<div class="mv">Game complete</div>You found <b>${V.firstTry}</b> of <b>${V.guessable}</b> moves on the first try.<hr style="border:0;border-top:1px solid var(--line);margin:10px 0">${V.game.lesson || ''}`;
-    $('#v-coach').innerHTML = msg;
+    $('#v-coach').innerHTML = `<div class="mv">${t('g.complete')}</div>${t('g.found', { a: V.firstTry, b: V.guessable })}${HR}${V.game.lesson || ''}`;
   }
 }
 
-function coachFeedback(html) { $('#v-coach').insertAdjacentHTML('afterbegin', html); }
-
-async function guessMove(from, to) {
+function guessMove(from, to) {
   const m = V.moves[V.idx];
   if (!m) return;
   V.tries++;
@@ -593,18 +555,15 @@ async function guessMove(from, to) {
     if (!V.hinted && V.tries === 1) V.firstTry++;
     V.tries = 0; V.hinted = false;
     V.idx++;
-    renderViewer(`<div class="ok"><b>Correct!</b></div>`, V.moves[V.idx - 1]);
+    renderViewer(`<div class="ok"><b>${t('g.correct')}</b></div>`, V.moves[V.idx - 1]);
     guessAdvance();
   } else {
     boardView.render(new Chess(V.fens[V.idx]), { last: V.idx > 0 ? { from: V.moves[V.idx - 1].from, to: V.moves[V.idx - 1].to } : null });
     $('#board-view').classList.remove('shake'); void $('#board-view').offsetWidth; $('#board-view').classList.add('shake');
-    renderViewerKeep(`<div class="no"><b>Not the master's move.</b> Try again, or use Hint.</div>`);
+    const i = V.idx - 1;
+    const base = V.idx === 0 ? `<div class="mv">${t('g.title')}</div>` : `<div class="mv">${moveLabel(i)}</div>${V.comments.get(i) || ''}`;
+    $('#v-coach').innerHTML = `<div class="no"><b>${t('g.wrong')}</b> ${t('g.wrong2')}</div>${base}`;
   }
-}
-function renderViewerKeep(extra) {
-  const i = V.idx - 1;
-  const base = V.idx === 0 ? `<div class="mv">Guess the move</div>` : `<div class="mv">${moveLabel(i)}</div>${V.comments.get(i) || ''}`;
-  $('#v-coach').innerHTML = extra + base;
 }
 $('#g-hint').onclick = () => {
   const m = V.moves[V.idx];
@@ -617,38 +576,79 @@ $('#g-show').onclick = () => {
   if (!m || m.color !== V.side || V.busy) return;
   V.hinted = true;
   boardView.setHint(m.from, m.to);
-  coachFeedback(`<div class="no"><b>The master played ${m.san}.</b> Play it on the board to continue.</div>`);
+  $('#v-coach').insertAdjacentHTML('afterbegin', `<div class="no"><b>${t('g.played', { m: m.san })}</b> ${t('g.played2')}</div>`);
 };
 
 /* ---- viewer extras: favorite, next game, remove ---- */
 function paintFav() {
-  const on = V.game && favs.has(V.game.id);
+  const on = V.raw && favs.has(V.raw.id);
   $('#v-fav').innerHTML = on ? '&#9733;' : '&#9734;';
   $('#v-fav').classList.toggle('on', !!on);
-  $('#v-fav').title = on ? 'Remove from favorites' : 'Add to favorites';
+  $('#v-fav').title = on ? t('fav.remove') : t('fav.add');
 }
-$('#v-fav').onclick = () => { toggleFav(V.game.id); paintFav(); };
+$('#v-fav').onclick = () => { toggleFav(V.raw.id); paintFav(); };
 $('#v-nextgame').onclick = () => {
-  const i = GAMES.findIndex((g) => g.id === V.game.id);
+  const i = GAMES.findIndex((g) => g.id === V.raw.id);
   location.hash = '#game/' + GAMES[(i + 1) % GAMES.length].id;
 };
 $('#v-remove').onclick = () => {
-  openModal(`<h2>Remove this game?</h2><p class="sub">It will be deleted from this browser.</p>
-    <div class="modal-actions"><button class="btn" id="rm-no">Cancel</button><button class="btn danger" id="rm-yes">Remove</button></div>`);
+  openModal(`<h2>${t('rm.title')}</h2><p class="sub">${t('rm.sub')}</p>
+    <div class="modal-actions"><button class="btn" id="rm-no">${t('rm.cancel')}</button><button class="btn danger" id="rm-yes">${t('rm.confirm')}</button></div>`);
   $('#rm-no').onclick = closeModal;
   $('#rm-yes').onclick = () => {
-    imported = imported.filter((g) => g.id !== V.game.id);
-    LS.set('gunmetal.imported', imported); favs.delete(V.game.id); saveFavs(); rebuildGames(); closeModal();
+    imported = imported.filter((g) => g.id !== V.raw.id);
+    LS.set('gunmetal.imported', imported); favs.delete(V.raw.id); saveFavs(); rebuildGames(); closeModal();
     location.hash = '#library';
   };
 };
 
-/* ================= sound toggle ================= */
+/* ================= sound, language, share ================= */
 const sndBtn = $('#snd');
-const paintSnd = () => { sndBtn.textContent = isSoundOn() ? 'Sound: On' : 'Sound: Off'; };
+const paintSnd = () => { sndBtn.textContent = isSoundOn() ? t('sound.on') : t('sound.off'); };
 sndBtn.onclick = () => { setSoundOn(!isSoundOn()); paintSnd(); };
-paintSnd();
+
+const langSel = $('#lang');
+langSel.innerHTML = LANGS.map(([code, short, name]) => `<option value="${code}">${short} · ${name}</option>`).join('');
+langSel.value = getLang();
+langSel.onchange = async () => {
+  const l = langSel.value;
+  setLang(l);
+  await loadContent(l);
+  trackEvent('lang-' + l, 'Language: ' + l);
+  relocalize();
+};
+
+/** Re-render the current screen after a language change (keeps the position in a famous game). */
+function relocalize() {
+  applyStatic();
+  paintSnd();
+  $('#pieces-strip').setAttribute('aria-label', 'Gunmetal Chess');
+  if (currentView === 'home') refreshHome();
+  else if (currentView === 'play') { if (P.started) updatePlay(); }
+  else if (currentView === 'library') renderLibrary();
+  else if (currentView === 'viewer') { const keep = V.idx; localizeViewer(); if (V.mode === 'watch') goTo(keep); else renderViewer(); }
+  else if (currentView === 'online') refreshOnline();
+  if (!$('#modal').classList.contains('hidden')) closeModal();
+}
+
+$('#share').onclick = async () => {
+  const url = location.origin + location.pathname;
+  try {
+    if (navigator.share) { await navigator.share({ title: 'Gunmetal Chess', url }); trackEvent('share', 'Share'); return; }
+  } catch (e) { return; }
+  try { await navigator.clipboard.writeText(url); } catch (e) { /* ignore */ }
+  const b = $('#share'); const old = b.textContent; b.textContent = t('ft.copied');
+  setTimeout(() => { b.textContent = old; }, 1800);
+  trackEvent('share', 'Share');
+};
+if (analyticsOn) $('#ft-stats').hidden = false;
 
 /* ================= boot ================= */
-$('#pieces-strip').innerHTML = ['wk', 'wq', 'wr', 'wb', 'wn', 'wp', 'bp', 'bn', 'bb', 'br', 'bq', 'bk'].map((k) => `<img src="img/${k}.png" alt="">`).join('');
-route();
+async function boot() {
+  await loadContent(getLang());
+  applyStatic();
+  paintSnd();
+  $('#pieces-strip').innerHTML = ['wk', 'wq', 'wr', 'wb', 'wn', 'wp', 'bp', 'bn', 'bb', 'br', 'bq', 'bk'].map((k) => `<img src="img/${k}.png" alt="">`).join('');
+  route();
+}
+boot();
