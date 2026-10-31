@@ -17,6 +17,8 @@
     <a href="#play" data-nav="play" data-i18n="nav.play">Play</a>
     <a href="#online" data-nav="online" data-i18n="nav.online">Play a Friend</a>
     <a href="#library" data-nav="library" data-i18n="nav.library">Famous Games</a>
+    <a href="#ranking" data-nav="ranking" data-i18n="nav.ranking">Ranking</a>
+    <button class="chip me" id="me-chip"></button>
     <select id="lang" class="langsel" data-i18n-title="lang.title" aria-label="Language"></select>
     <button class="snd" id="snd" data-i18n-title="sound.title">Sound: On</button>
   </nav>
@@ -118,6 +120,19 @@
         <div class="movelist" id="on-moves"></div>
       </aside>
     </div>
+  </section>
+
+  <!-- RANKING -->
+  <section id="view-ranking" class="view hidden">
+    <h2 class="page-title" data-i18n="rk.title">Ranking</h2>
+    <p class="page-sub" data-i18n="rk.sub"></p>
+    <div class="mode-row" style="margin:16px 0">
+      <button class="btn mode on" id="rk-local" data-i18n="rk.local">On this device</button>
+      <button class="btn mode" id="rk-global" data-i18n="rk.global" hidden>Worldwide</button>
+    </div>
+    <div id="rk-table"></div>
+    <h3 class="sec" data-i18n="rk.how">How points work</h3>
+    <ul class="rules"><li data-i18n="rk.rule.cpu"></li><li data-i18n="rk.rule.online"></li><li data-i18n="rk.rule.loss"></li><li data-i18n="rk.rule.disc"></li></ul>
   </section>
 
   <!-- LIBRARY -->

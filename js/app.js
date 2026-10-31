@@ -4,16 +4,18 @@ import { Engine, LEVELS } from './engine.js';
 import { GAMES as BASE_GAMES, COLLECTIONS, LEGENDS } from './games.js';
 import { Effects, isSoundOn, setSoundOn } from './effects.js';
 import { t, tEnum, LANGS, getLang, setLang, applyStatic, loadContent, locGame, locCollection, locLegend } from './i18n.js';
-import { $, sleep, openModal, closeModal, askPromotion, capsHtml, capturedBy, lastMoveOf, renderMoves } from './ui.js';
+import { $, esc, sleep, openModal, closeModal, askPromotion, capsHtml, capturedBy, lastMoveOf, renderMoves } from './ui.js';
 import { analyticsOn, trackView, trackEvent, initConsent } from './analytics.js';
 import { enterOnline, refreshOnline } from './online.js';
+import { getPlayer, recordResult, localBoard, globalBoard, globalOn } from './player.js';
+import { ensureProfile, askName, paintChip } from './profile-ui.js';
 
 const SAVE_KEY = 'gunmetal.game.v1';
 const strip = (s) => s.replace(/[!?+#]+$/g, '');
 const lvLabel = (k) => t('lv.' + k);
 
 /* ---------------- router ---------------- */
-const views = ['home', 'play', 'online', 'library', 'viewer'];
+const views = ['home', 'play', 'online', 'ranking', 'library', 'viewer'];
 let currentView = 'home';
 function show(name) {
   currentView = name;
@@ -27,6 +29,7 @@ function route() {
   if (h.startsWith('game/')) { openViewer(h.slice(5)); return; }
   if (h.startsWith('join/')) { show('online'); enterOnline(h.slice(5)); return; }
   if (h === 'online') { show('online'); enterOnline(); return; }
+  if (h === 'ranking') { show('ranking'); renderRanking(); return; }
   if (h === 'play') { show('play'); enterPlay(); return; }
   if (h === 'library') { show('library'); renderLibrary(); return; }
   show('home'); refreshHome();
@@ -71,7 +74,7 @@ function enterPlay() {
 
 function restore(s) {
   P.chess = new Chess(); P.chess.loadPgn(s.pgn);
-  P.human = s.human; P.level = s.level; P.over = false; P.started = true; P.thinking = false; P.counted = false;
+  P.human = s.human; P.level = s.level; P.over = false; P.started = true; P.thinking = false; P.counted = false; P.pts = 0;
   boardPlay.flipped = P.human === 'b'; boardPlay.build();
   updatePlay();
   if (P.chess.turn() !== P.human && !P.chess.isGameOver()) engineMove();
@@ -92,14 +95,14 @@ function openSetup() {
       <div class="modal-actions"><button class="btn primary" id="go">${t('setup.start')}</button></div>`);
     $('#lv').onclick = (e) => { const b = e.target.closest('[data-lv]'); if (b) { level = b.dataset.lv; render(); } };
     $('#cl').onclick = (e) => { const b = e.target.closest('[data-cl]'); if (b) { color = b.dataset.cl; render(); } };
-    $('#go').onclick = () => { closeModal(); startGame(level, color === 'r' ? (Math.random() < 0.5 ? 'w' : 'b') : color); };
+    $('#go').onclick = async () => { closeModal(); await ensureProfile(); startGame(level, color === 'r' ? (Math.random() < 0.5 ? 'w' : 'b') : color); };
   };
   render();
 }
 
 function startGame(level, human) {
   P.token++;
-  P.chess = new Chess(); P.level = level; P.human = human; P.over = false; P.started = true; P.thinking = false; P.counted = false; P.resigned = false;
+  P.chess = new Chess(); P.level = level; P.human = human; P.over = false; P.started = true; P.thinking = false; P.counted = false; P.resigned = false; P.pts = 0;
   boardPlay.flipped = human === 'b'; boardPlay.build(); boardPlay.hint = null;
   updatePlay(); saveGame();
   trackEvent('game-start-' + level, 'Game vs computer started (' + level + ')');
@@ -121,6 +124,7 @@ function updatePlay(fxMove = null) {
   else if (P.thinking) { msg = t('status.thinking'); cls = 'thinking'; }
   else msg = c.isCheck() ? t('status.check') : t('status.your');
   const st = $('#play-status'); st.className = 'status ' + cls; st.textContent = msg;
+  if (P.over && P.pts) st.insertAdjacentHTML('beforeend', ` <span class="pts-earned">${t('rk.earned', { n: P.pts })}</span>`);
   $('#btn-undo').disabled = P.thinking || c.history().length === 0;
   $('#btn-hint').disabled = P.thinking || P.over || c.turn() !== P.human;
   $('#btn-resign').disabled = P.over;
@@ -129,7 +133,10 @@ function updatePlay(fxMove = null) {
     if (!P.counted) {
       P.counted = true;
       const won = P.resigned ? false : c.isCheckmate() ? c.turn() !== P.human : null;
-      trackEvent('game-end-' + (won === true ? 'win' : won === false ? 'loss' : 'draw'), 'Game vs computer ended');
+      const result = won === true ? 'win' : won === false ? 'loss' : 'draw';
+      P.pts = recordResult({ mode: 'cpu', level: P.level, result });
+      trackEvent('game-end-' + result, 'Game vs computer ended');
+      const st2 = $('#play-status'); if (P.pts) st2.insertAdjacentHTML('beforeend', ` <span class="pts-earned">${t('rk.earned', { n: P.pts })}</span>`);
     }
   }
 }
@@ -194,7 +201,7 @@ $('#btn-flip').onclick = () => boardPlay.flip();
 $('#btn-undo').onclick = () => {
   if (P.thinking) return;
   const c = P.chess;
-  P.token++; P.over = false; P.resigned = false; P.counted = false;
+  P.token++; P.over = false; P.resigned = false; P.counted = false; P.pts = 0;
   c.undo();
   if (c.turn() !== P.human && c.history().length > 0) c.undo();
   updatePlay(); saveGame();
@@ -602,6 +609,28 @@ $('#v-remove').onclick = () => {
   };
 };
 
+/* ================= RANKING ================= */
+let rkTab = 'local';
+async function renderRanking() {
+  $('#rk-global').hidden = !globalOn;
+  $('#rk-local').classList.toggle('on', rkTab === 'local');
+  $('#rk-global').classList.toggle('on', rkTab === 'global');
+  const box = $('#rk-table');
+  let rows = [];
+  if (rkTab === 'global' && globalOn) {
+    box.innerHTML = `<div class="empty">${t('rk.loading')}</div>`;
+    try { rows = await globalBoard(50); } catch (e) { box.innerHTML = `<div class="empty">${t('rk.error')}</div>`; return; }
+  } else rows = localBoard();
+  if (!rows.length) { box.innerHTML = `<div class="empty">${t('rk.empty')}</div>`; return; }
+  const me = getPlayer();
+  box.innerHTML = `<table class="rk"><thead><tr><th>${t('rk.col.pos')}</th><th class="nm">${t('rk.col.player')}</th><th>${t('rk.col.pts')}</th><th>${t('rk.col.w')}</th><th>${t('rk.col.d')}</th><th>${t('rk.col.l')}</th><th>${t('rk.col.cpu')}</th><th>${t('rk.col.online')}</th></tr></thead><tbody>` +
+    rows.map((p, i) => `<tr class="${me && p.id === me.id ? 'me' : ''}"><td class="pos">${i + 1}</td><td class="nm">${esc(p.name)}${me && p.id === me.id ? ` <small style="color:var(--muted)">(${t('rk.you')})</small>` : ''}</td><td class="pts">${p.points}</td><td>${p.w}</td><td>${p.d}</td><td>${p.l}</td><td>${p.cpu}</td><td>${p.online}</td></tr>`).join('') +
+    '</tbody></table>';
+}
+$('#rk-local').onclick = () => { rkTab = 'local'; renderRanking(); };
+$('#rk-global').onclick = () => { rkTab = 'global'; renderRanking(); };
+$('#me-chip').onclick = () => { askName(true); };
+
 /* ================= sound, language, share ================= */
 const sndBtn = $('#snd');
 const paintSnd = () => { sndBtn.textContent = isSoundOn() ? t('sound.on') : t('sound.off'); };
@@ -628,6 +657,8 @@ function relocalize() {
   else if (currentView === 'library') renderLibrary();
   else if (currentView === 'viewer') { const keep = V.idx; localizeViewer(); if (V.mode === 'watch') goTo(keep); else renderViewer(); }
   else if (currentView === 'online') refreshOnline();
+  else if (currentView === 'ranking') renderRanking();
+  paintChip();
   if (!$('#modal').classList.contains('hidden')) closeModal();
 }
 
@@ -648,6 +679,7 @@ async function boot() {
   await loadContent(getLang());
   applyStatic();
   paintSnd();
+  paintChip();
   initConsent();
   $('#pieces-strip').innerHTML = ['wk', 'wq', 'wr', 'wb', 'wn', 'wp', 'bp', 'bn', 'bb', 'br', 'bq', 'bk'].map((k) => `<img src="img/${k}.png" alt="">`).join('');
   route();

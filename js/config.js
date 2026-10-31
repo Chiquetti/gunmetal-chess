@@ -6,5 +6,9 @@
 //  - goatcounter: site code of a free GoatCounter account (cookie-free alternative).
 export const CONFIG = {
   ga4: '',
-  goatcounter: ''
+  goatcounter: '',
+  // WORLDWIDE RANKING (optional): a free Supabase project. See projetos/xadrez-sogro/supabase-setup.sql.
+  // supabaseUrl like 'https://abcd1234.supabase.co', supabaseKey is the project's public "anon" key.
+  supabaseUrl: '',
+  supabaseKey: ''
 };

@@ -6,6 +6,8 @@ import { Effects } from './effects.js';
 import { t } from './i18n.js';
 import { $, esc, openModal, closeModal, askPromotion, capsHtml, capturedBy, lastMoveOf, renderMoves } from './ui.js';
 import { trackEvent } from './analytics.js';
+import { getPlayer, recordResult, cleanName } from './player.js';
+import { ensureProfile } from './profile-ui.js';
 
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const ICE = {
@@ -19,8 +21,11 @@ const PeerCtor = () => (window.peerjs && window.peerjs.Peer) || window.Peer;
 
 const O = {
   peer: null, conn: null, role: null, my: 'w', chess: new Chess(), code: '',
-  pick: 'w', started: false, over: false, ended: '', drawSent: false, rematchSent: false, panel: 'lobby'
+  pick: 'w', started: false, over: false, ended: '', drawSent: false, rematchSent: false, panel: 'lobby',
+  oppName: '', counted: false, pts: 0
 };
+const myName = () => (getPlayer() ? getPlayer().name : t('on.you'));
+const oppName = () => O.oppName || t('on.opponent');
 
 const boardOn = new Board($('#board-online'), {
   canPick: (sq, p) => O.started && !O.over && p.color === O.my && O.chess.turn() === O.my,
@@ -52,7 +57,7 @@ function teardown() {
   try { if (O.conn) O.conn.close(); } catch (e) { /* ignore */ }
   try { if (O.peer) O.peer.destroy(); } catch (e) { /* ignore */ }
   O.conn = null; O.peer = null; O.started = false; O.over = false; O.role = null;
-  O.drawSent = false; O.rematchSent = false;
+  O.drawSent = false; O.rematchSent = false; O.oppName = ''; O.counted = false; O.pts = 0;
 }
 
 function createGame() {
@@ -111,7 +116,7 @@ function setupConn(conn, onOpen) {
     if (O.role === 'host') {
       const mine = O.pick === 'r' ? (Math.random() < 0.5 ? 'w' : 'b') : O.pick;
       O.my = mine;
-      conn.send({ t: 'start', guestColor: other(mine) });
+      conn.send({ t: 'start', guestColor: other(mine), name: myName() });
       beginGame();
     }
   });
@@ -130,8 +135,11 @@ function onData(msg) {
   switch (msg.t) {
     case 'start':
       O.my = msg.guestColor === 'b' ? 'b' : 'w';
+      O.oppName = cleanName(msg.name);
+      send({ t: 'hello', name: myName() });
       beginGame();
       break;
+    case 'hello': O.oppName = cleanName(msg.name); update(); break;
     case 'move': {
       if (!O.started || O.over || O.chess.turn() === O.my) return;
       let mv;
@@ -140,15 +148,15 @@ function onData(msg) {
       break;
     }
     case 'resign': O.over = true; O.ended = 'resignedThem'; update(); break;
-    case 'draw-offer': askBar(t('on.drawAsk'), 'draw'); break;
+    case 'draw-offer': askBar(t('on.drawAsk', { name: oppName() }), 'draw'); break;
     case 'draw-accept': O.over = true; O.ended = 'draw'; O.drawSent = false; update(); break;
     case 'draw-decline': O.drawSent = false; flash(t('on.drawDeclined')); update(); break;
     case 'rematch-offer':
       if (O.rematchSent) { send({ t: 'rematch-accept' }); nextGame(); }
-      else askBar(t('on.rematchAsk'), 'rematch');
+      else askBar(t('on.rematchAsk', { name: oppName() }), 'rematch');
       break;
     case 'rematch-accept': nextGame(); break;
-    case 'chat': if (typeof msg.text === 'string') addChat('them', msg.text.slice(0, 200)); break;
+    case 'chat': if (typeof msg.text === 'string') addChat('them', msg.text.slice(0, 200), oppName()); break;
     default: break;
   }
 }
@@ -157,7 +165,7 @@ function onData(msg) {
 function beginGame() {
   O.chess = new Chess();
   setMsg('');
-  O.started = true; O.over = false; O.ended = ''; O.drawSent = false; O.rematchSent = false;
+  O.started = true; O.over = false; O.ended = ''; O.drawSent = false; O.rematchSent = false; O.counted = false; O.pts = 0;
   boardOn.flipped = O.my === 'b'; boardOn.build();
   $('#on-chatlog').innerHTML = '';
   addChat('sys', t('on.connected'));
@@ -169,7 +177,7 @@ function beginGame() {
 function nextGame() {
   O.my = other(O.my);
   O.chess = new Chess();
-  O.over = false; O.ended = ''; O.drawSent = false; O.rematchSent = false;
+  O.over = false; O.ended = ''; O.drawSent = false; O.rematchSent = false; O.counted = false; O.pts = 0;
   boardOn.flipped = O.my === 'b'; boardOn.build();
   hideAsk(); update();
 }
@@ -186,16 +194,27 @@ async function userMove(from, to) {
   update(mv);
 }
 
+function outcome() {
+  const c = O.chess;
+  if (O.ended === 'resignedMe') return 'loss';
+  if (O.ended === 'resignedThem') return 'win';
+  if (O.ended === 'draw') return 'draw';
+  if (O.ended === 'disc') return null;
+  if (c.isCheckmate()) return c.turn() === O.my ? 'loss' : 'win';
+  if (c.isGameOver()) return 'draw';
+  return null;
+}
+
 function resultText() {
   const c = O.chess;
   switch (O.ended) {
     case 'resignedMe': return t('on.resignedMe');
-    case 'resignedThem': return t('on.resignedThem');
+    case 'resignedThem': return t('on.resignedThem', { name: oppName() });
     case 'draw': return t('on.drawAgreed');
-    case 'disc': return t('on.disconnected');
+    case 'disc': return t('on.disconnected', { name: oppName() });
     default: break;
   }
-  if (c.isCheckmate()) return c.turn() === O.my ? t('on.mateLose') : t('on.mateWin');
+  if (c.isCheckmate()) return c.turn() === O.my ? t('on.mateLose', { name: oppName() }) : t('on.mateWin');
   if (c.isStalemate()) return t('res.stalemate');
   if (c.isThreefoldRepetition()) return t('res.repetition');
   if (c.isInsufficientMaterial()) return t('res.insufficient');
@@ -208,18 +227,24 @@ function update(fxMove = null) {
   const c = O.chess;
   fxOn.reset();
   boardOn.render(c, { last: lastMoveOf(c) });
-  if (fxMove) fxOn.play(fxMove, c, { sub: fxMove.color === O.my ? t('fx.youwin') : t('fx.oppwins') });
+  if (fxMove) fxOn.play(fxMove, c, { sub: fxMove.color === O.my ? t('fx.youwin') : t('fx.oppwins', { name: oppName() }) });
   const opp = other(O.my);
-  $('#on-opp-bar').innerHTML = `<b>${t('on.opponent')}</b> <span>${t('color.' + opp)}</span><span class="caps">${capsHtml(capturedBy(c, opp), O.my)}</span>`;
-  $('#on-me-bar').innerHTML = `<b>${t('on.you')}</b> <span>${t('color.' + O.my)}</span><span class="caps">${capsHtml(capturedBy(c, O.my), opp)}</span>`;
+  $('#on-opp-bar').innerHTML = `<b>${esc(oppName())}</b> <span>${t('color.' + opp)}</span><span class="caps">${capsHtml(capturedBy(c, opp), O.my)}</span>`;
+  $('#on-me-bar').innerHTML = `<b>${esc(myName())}</b> <span>${t('color.' + O.my)}</span><span class="caps">${capsHtml(capturedBy(c, O.my), opp)}</span>`;
   renderMoves($('#on-moves'), c.history(), -1, null, false);
   let msg, cls = '';
   if (c.isGameOver() && !O.over) { O.over = true; }
+  if (O.over && !O.counted) {
+    O.counted = true;
+    const res = outcome();
+    if (res) { O.pts = recordResult({ mode: 'online', result: res }); trackEvent('online-end-' + res, 'Online game ended'); }
+  }
   if (O.over) { msg = resultText(); cls = 'over'; }
   else if (O.drawSent) msg = t('on.drawOffered');
   else if (c.turn() === O.my) msg = c.isCheck() ? t('on.check') + ' ' + t('on.yourTurn') : t('on.yourTurn');
-  else msg = t('on.theirTurn');
+  else msg = t('on.theirTurn', { name: oppName() });
   const st = $('#on-status'); st.className = 'status ' + cls; st.textContent = msg;
+  if (O.over && O.pts) st.insertAdjacentHTML('beforeend', ` <span class="pts-earned">${t('rk.earned', { n: O.pts })}</span>`);
   $('#on-draw').disabled = O.over || O.drawSent;
   $('#on-resign').disabled = O.over;
   $('#on-rematch').hidden = !O.over || O.ended === 'disc';
@@ -247,11 +272,11 @@ function askBar(text, kind) {
 function hideAsk() { const el = $('#on-ask'); el.hidden = true; el.innerHTML = ''; }
 function flash(text) { addChat('sys', text); }
 
-function addChat(who, text) {
+function addChat(who, text, name) {
   const log = $('#on-chatlog');
   const d = document.createElement('div');
   d.className = 'chat ' + who;
-  d.textContent = text;
+  d.textContent = name ? `${name}: ${text}` : text;
   log.appendChild(d);
   log.scrollTop = log.scrollHeight;
 }
@@ -266,9 +291,9 @@ $('#on-chatform').onsubmit = (e) => {
 };
 
 /* ---------- buttons ---------- */
-$('#on-create').onclick = createGame;
-$('#on-join').onclick = () => joinGame($('#on-code').value);
-$('#on-code').onkeydown = (e) => { if (e.key === 'Enter') joinGame($('#on-code').value); };
+$('#on-create').onclick = async () => { await ensureProfile(); createGame(); };
+$('#on-join').onclick = async () => { await ensureProfile(); joinGame($('#on-code').value); };
+$('#on-code').onkeydown = async (e) => { if (e.key === 'Enter') { await ensureProfile(); joinGame($('#on-code').value); } };
 $('#on-cancel').onclick = () => { teardown(); showPanel('lobby'); setMsg(''); };
 $('#on-copy').onclick = async () => {
   const url = $('#on-link').value;
@@ -292,7 +317,7 @@ export function enterOnline(joinCode) {
   renderColorPick();
   if (joinCode) {
     $('#on-code').value = joinCode.toUpperCase();
-    if (!O.started && O.panel !== 'wait') joinGame(joinCode);
+    if (!O.started && O.panel !== 'wait') ensureProfile().then(() => joinGame(joinCode));
     return;
   }
   showPanel(O.panel);
