@@ -639,7 +639,7 @@ const paintSnd = () => { sndBtn.textContent = isSoundOn() ? t('sound.on') : t('s
 sndBtn.onclick = () => { setSoundOn(!isSoundOn()); paintSnd(); };
 
 const langSel = $('#lang');
-langSel.innerHTML = LANGS.map(([code, , name]) => `<option value="${code}">${name}</option>`).join('');
+langSel.innerHTML = LANGS.map(([code, short, name]) => `<option value="${code}" title="${name}">${short}</option>`).join('');
 langSel.value = getLang();
 langSel.onchange = async () => {
   const l = langSel.value;
