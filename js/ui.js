@@ -5,17 +5,33 @@ export const $ = (s) => document.querySelector(s);
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-export function openModal(html) {
-  $('#modal-card').innerHTML = html;
+let modalClose = null;
+/** Opens the dialog. Every dialog has an X, closes with Esc or by clicking outside; opts.onClose runs when it is dismissed. */
+export function openModal(html, opts = {}) {
+  modalClose = opts.onClose || null;
+  $('#modal-card').innerHTML = `<button class="modal-x" id="modal-x" aria-label="${t('modal.close')}" title="${t('modal.close')}">&times;</button>` + html;
   $('#modal-card').onclick = null;
   $('#modal').classList.remove('hidden');
 }
-export function closeModal() { $('#modal').classList.add('hidden'); $('#modal-card').innerHTML = ''; }
+/** Closes the dialog from code (does not run onClose). */
+export function closeModal() { $('#modal').classList.add('hidden'); $('#modal-card').innerHTML = ''; modalClose = null; }
+/** The person closed it: X, Esc or click outside. */
+export function dismissModal() {
+  if ($('#modal').classList.contains('hidden')) return;
+  const cb = modalClose;
+  closeModal();
+  if (cb) cb();
+}
+document.addEventListener('click', (e) => {
+  if (e.target.id === 'modal' || e.target.closest('#modal-x')) dismissModal();
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') dismissModal(); });
 
 export function askPromotion(color) {
   return new Promise((resolve) => {
     openModal(`<h2>${t('promo.title')}</h2><p class="sub">${t('promo.sub')}</p>
-      <div class="promo">${['q', 'r', 'b', 'n'].map((p) => `<button data-p="${p}" title="${t('piece.' + p)}"><img src="img/${color}${p}.png" alt="${t('piece.' + p)}"></button>`).join('')}</div>`);
+      <div class="promo">${['q', 'r', 'b', 'n'].map((p) => `<button data-p="${p}" title="${t('piece.' + p)}"><img src="img/${color}${p}.png" alt="${t('piece.' + p)}"></button>`).join('')}</div>`,
+      { onClose: () => resolve(null) });
     $('#modal-card').onclick = (e) => { const b = e.target.closest('[data-p]'); if (b) { closeModal(); resolve(b.dataset.p); } };
   });
 }

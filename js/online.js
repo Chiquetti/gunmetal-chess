@@ -187,7 +187,7 @@ async function userMove(from, to) {
   const cands = c.moves({ square: from, verbose: true }).filter((m) => m.to === to);
   if (!cands.length) return;
   let promotion;
-  if (cands[0].promotion) promotion = await askPromotion(O.my);
+  if (cands[0].promotion) { promotion = await askPromotion(O.my); if (!promotion) { boardOn.render(c, { last: lastMoveOf(c) }); return; } }
   let mv;
   try { mv = c.move({ from, to, promotion }); } catch (e) { return; }
   send({ t: 'move', from, to, promotion });
@@ -291,9 +291,9 @@ $('#on-chatform').onsubmit = (e) => {
 };
 
 /* ---------- buttons ---------- */
-$('#on-create').onclick = async () => { await ensureProfile(); createGame(); };
-$('#on-join').onclick = async () => { await ensureProfile(); joinGame($('#on-code').value); };
-$('#on-code').onkeydown = async (e) => { if (e.key === 'Enter') { await ensureProfile(); joinGame($('#on-code').value); } };
+$('#on-create').onclick = async () => { if (!(await ensureProfile())) return; createGame(); };
+$('#on-join').onclick = async () => { if (!(await ensureProfile())) return; joinGame($('#on-code').value); };
+$('#on-code').onkeydown = async (e) => { if (e.key === 'Enter') { if (!(await ensureProfile())) return; joinGame($('#on-code').value); } };
 $('#on-cancel').onclick = () => { teardown(); showPanel('lobby'); setMsg(''); };
 $('#on-copy').onclick = async () => {
   const url = $('#on-link').value;
@@ -317,7 +317,7 @@ export function enterOnline(joinCode) {
   renderColorPick();
   if (joinCode) {
     $('#on-code').value = joinCode.toUpperCase();
-    if (!O.started && O.panel !== 'wait') ensureProfile().then(() => joinGame(joinCode));
+    if (!O.started && O.panel !== 'wait') ensureProfile().then((p) => { if (p) joinGame(joinCode); });
     return;
   }
   showPanel(O.panel);

@@ -260,6 +260,8 @@ const D = {
   'pwa.offline': ['You are offline. Playing the computer and studying games still work.', 'Você está offline. Jogar contra o computador e estudar partidas continua funcionando.', 'Vous êtes hors ligne. Jouer contre l’ordinateur et étudier les parties fonctionne toujours.'],
 
   // name reservation / recovery
+  'modal.close': ['Close', 'Fechar', 'Fermer'],
+  'pf.skip': ['Skip: play without a ranking name', 'Pular: jogar sem nome no ranking', 'Passer : jouer sans nom au classement'],
   'pf.globalNote': ['Names are reserved: nobody else can use yours.', 'Os nomes são reservados: ninguém mais pode usar o seu.', 'Les noms sont réservés : personne d’autre ne peut utiliser le vôtre.'],
   'pf.taken': ['This name is already taken. Please choose another.', 'Este nome já está em uso. Escolha outro.', 'Ce nom est déjà pris. Choisissez-en un autre.'],
   'pf.invalid': ['Use 2 to 20 letters, numbers, spaces, dots or dashes.', 'Use de 2 a 20 letras, números, espaços, pontos ou hifens.', 'Utilisez 2 à 20 lettres, chiffres, espaces, points ou tirets.'],

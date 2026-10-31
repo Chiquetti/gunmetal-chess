@@ -340,4 +340,6 @@ export default {
   "pf.copied": "¡Copiado!",
   "pf.continue": "Continuar",
   "rk.localOnly": "Esta lista muestra solo a los jugadores de este dispositivo. El ranking mundial aún no está activado.",
+  "modal.close": "Cerrar",
+  "pf.skip": "Omitir: jugar sin nombre en el ranking",
 };

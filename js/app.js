@@ -97,7 +97,7 @@ function openSetup() {
       <div class="modal-actions"><button class="btn primary" id="go">${t('setup.start')}</button></div>`);
     $('#lv').onclick = (e) => { const b = e.target.closest('[data-lv]'); if (b) { level = b.dataset.lv; render(); } };
     $('#cl').onclick = (e) => { const b = e.target.closest('[data-cl]'); if (b) { color = b.dataset.cl; render(); } };
-    $('#go').onclick = async () => { closeModal(); await ensureProfile(); startGame(level, color === 'r' ? (Math.random() < 0.5 ? 'w' : 'b') : color); };
+    $('#go').onclick = async () => { closeModal(); if (!(await ensureProfile())) return; startGame(level, color === 'r' ? (Math.random() < 0.5 ? 'w' : 'b') : color); };
   };
   render();
 }
@@ -159,7 +159,7 @@ async function userMove(from, to) {
   const cands = c.moves({ square: from, verbose: true }).filter((m) => m.to === to);
   if (!cands.length) return;
   let promotion;
-  if (cands[0].promotion) promotion = await askPromotion(P.human);
+  if (cands[0].promotion) { promotion = await askPromotion(P.human); if (!promotion) { boardPlay.render(c, { last: lastMoveOf(c) }); return; } }
   let mv;
   try { mv = c.move({ from, to, promotion }); } catch (e) { return; }
   P.resigned = false;
@@ -632,7 +632,7 @@ async function renderRanking() {
 }
 $('#rk-local').onclick = () => { rkTab = 'local'; renderRanking(); };
 $('#rk-global').onclick = () => { rkTab = 'global'; renderRanking(); };
-$('#me-chip').onclick = () => { askName(true); };
+$('#me-chip').onclick = () => { askName(); };
 
 /* ================= sound, language, share ================= */
 const sndBtn = $('#snd');
