@@ -1,9 +1,10 @@
 // Site configuration.
 //
-// ANALYTICS: to see how many people play and from where, create a free GoatCounter site
-// (https://www.goatcounter.com) and put its site code here, e.g. 'gunmetal-chess' for
-// https://gunmetal-chess.goatcounter.com . Leave empty to keep analytics off.
-// GoatCounter is cookie-free, so no consent banner is needed.
+// ANALYTICS (both optional, leave empty to keep them off):
+//  - ga4: Google Analytics 4 Measurement ID, like 'G-XXXXXXXXXX' (GA4 > Admin > Data streams > Web).
+//         Uses consent mode and shows a small consent bar to the visitor.
+//  - goatcounter: site code of a free GoatCounter account (cookie-free alternative).
 export const CONFIG = {
+  ga4: '',
   goatcounter: ''
 };

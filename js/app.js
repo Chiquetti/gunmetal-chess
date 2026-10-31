@@ -5,7 +5,7 @@ import { GAMES as BASE_GAMES, COLLECTIONS, LEGENDS } from './games.js';
 import { Effects, isSoundOn, setSoundOn } from './effects.js';
 import { t, tEnum, LANGS, getLang, setLang, applyStatic, loadContent, locGame, locCollection, locLegend } from './i18n.js';
 import { $, sleep, openModal, closeModal, askPromotion, capsHtml, capturedBy, lastMoveOf, renderMoves } from './ui.js';
-import { analyticsOn, trackView, trackEvent } from './analytics.js';
+import { analyticsOn, trackView, trackEvent, initConsent } from './analytics.js';
 import { enterOnline, refreshOnline } from './online.js';
 
 const SAVE_KEY = 'gunmetal.game.v1';
@@ -648,6 +648,7 @@ async function boot() {
   await loadContent(getLang());
   applyStatic();
   paintSnd();
+  initConsent();
   $('#pieces-strip').innerHTML = ['wk', 'wq', 'wr', 'wb', 'wn', 'wp', 'bp', 'bn', 'bb', 'br', 'bq', 'bk'].map((k) => `<img src="img/${k}.png" alt="">`).join('');
   route();
 }

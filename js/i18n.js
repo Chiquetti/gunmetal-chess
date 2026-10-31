@@ -13,7 +13,10 @@ const D = {
   'sound.off': ['Sound: Off', 'Som: desligado', 'Son : coupé'],
   'sound.title': ['Toggle sound effects', 'Ligar/desligar os efeitos sonoros', 'Activer/couper les effets sonores'],
   'lang.title': ['Language', 'Idioma', 'Langue'],
-  'ft.stats': ['Anonymous visit statistics (country level, no cookies).', 'Estatísticas anônimas de visitas (por país, sem cookies).', 'Statistiques de visite anonymes (par pays, sans cookies).'],
+  'ft.stats': ['Anonymous visit statistics.', 'Estatísticas anônimas de visitas.', 'Statistiques de visite anonymes.'],
+  'cb.text': ['We use anonymous statistics to see how the game is used and where it is played. Allow?', 'Usamos estatísticas anônimas para ver como o jogo é usado e de onde. Permitir?', 'Nous utilisons des statistiques anonymes pour savoir comment et d’où le jeu est utilisé. Autoriser ?'],
+  'cb.yes': ['Allow', 'Permitir', 'Autoriser'],
+  'cb.no': ['No thanks', 'Não, obrigado', 'Non merci'],
   'ft.share': ['Share this game', 'Compartilhar este jogo', 'Partager ce jeu'],
   'ft.copied': ['Link copied!', 'Link copiado!', 'Lien copié !'],
 
