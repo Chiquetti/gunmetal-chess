@@ -66,7 +66,7 @@ main{max-width:1180px;margin:0 auto;padding:22px 16px 60px}
 .sq.light .coord{color:#80603d}.sq.dark .coord{color:#e6d5ad}
 .piece{position:relative;z-index:2;object-fit:contain;object-position:bottom;pointer-events:none;filter:drop-shadow(0 4px 3px rgba(0,0,0,.5))}
 .t-k{height:98%;max-width:92%}.t-q{height:94%;max-width:92%}.t-r{height:86%;max-width:92%}
-.t-b{height:92%;max-width:96%}.t-n{height:84%;max-width:96%}.t-p{height:72%;max-width:80%}
+.t-b{height:78%;max-width:84%}.t-n{height:84%;max-width:96%}.t-p{height:72%;max-width:80%}
 /* revolver and cartridge are shorter pieces: center them in the square instead of sitting on the bottom edge */
 .piece.t-n,.piece.t-p{align-self:center;margin-top:3%}
 .piece.ghost{position:fixed;z-index:1000;pointer-events:none;object-fit:contain;max-width:none;filter:drop-shadow(0 10px 8px rgba(0,0,0,.5))}
