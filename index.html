@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gunmetal Chess</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#home">GUNMETAL <span>CHESS</span></a>
+  <nav>
+    <a href="#home" data-nav="home">Home</a>
+    <a href="#play" data-nav="play">Play</a>
+    <a href="#library" data-nav="library">Famous Games</a>
+    <button class="snd" id="snd" title="Toggle sound effects">Sound: On</button>
+  </nav>
+</header>
+
+<main>
+  <!-- HOME -->
+  <section id="view-home" class="view">
+    <div class="hero">
+      <h1>Your move.</h1>
+      <p>Play the computer at three levels, or study the great games of history one move at a time.</p>
+    </div>
+    <div class="home-cards">
+      <button class="home-card" id="home-new"><b>Play the Computer</b><span>Choose Easy, Medium or Hard.</span></button>
+      <button class="home-card" id="home-continue" hidden><b>Continue Game</b><span id="home-continue-sub"></span></button>
+      <a class="home-card" href="#library"><b>Famous Games</b><span>Watch the masters play, with a coach explaining each key move.</span></a>
+    </div>
+    <div class="pieces-strip" id="pieces-strip"></div>
+  </section>
+
+  <!-- PLAY -->
+  <section id="view-play" class="view hidden">
+    <div class="layout">
+      <div class="board-col">
+        <div class="player-bar" id="opp-bar"></div>
+        <div id="board-play"></div>
+        <div class="player-bar" id="me-bar"></div>
+      </div>
+      <aside class="panel">
+        <div class="status" id="play-status"></div>
+        <div class="btn-row">
+          <button class="btn" id="btn-new">New Game</button>
+          <button class="btn" id="btn-undo">Take Back</button>
+          <button class="btn" id="btn-hint">Hint</button>
+          <button class="btn" id="btn-flip">Flip</button>
+          <button class="btn danger" id="btn-resign">Resign</button>
+        </div>
+        <h3>Moves</h3>
+        <div class="movelist" id="play-moves"></div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- LIBRARY -->
+  <section id="view-library" class="view hidden">
+    <h2 class="page-title">Famous Games</h2>
+    <p class="page-sub">Masters and Grandmasters, one move at a time. Watch with commentary, or test yourself by guessing the master's next move.</p>
+    <div class="lib-grid" id="lib-grid"></div>
+  </section>
+
+  <!-- VIEWER -->
+  <section id="view-viewer" class="view hidden">
+    <div class="layout">
+      <div class="board-col">
+        <div id="board-view"></div>
+        <div class="controls">
+          <button class="btn" id="v-first" title="Start">&#9198;</button>
+          <button class="btn" id="v-prev" title="Previous">&#9664;</button>
+          <button class="btn primary" id="v-play" title="Auto-play">&#9654; Play</button>
+          <button class="btn" id="v-next" title="Next">&#9654;</button>
+          <button class="btn" id="v-last" title="End">&#9197;</button>
+        </div>
+      </div>
+      <aside class="panel">
+        <a class="back" href="#library">&larr; All games</a>
+        <h2 id="v-title"></h2>
+        <div class="meta" id="v-meta"></div>
+        <div class="mode-row">
+          <button class="btn mode on" id="mode-watch">Watch</button>
+          <button class="btn mode" id="mode-guess">Guess the move</button>
+        </div>
+        <div class="coach" id="v-coach"></div>
+        <div class="btn-row" id="guess-tools" hidden>
+          <button class="btn" id="g-hint">Hint</button>
+          <button class="btn" id="g-show">Show move</button>
+          <button class="btn" id="g-side">Playing: White</button>
+        </div>
+        <h3>Moves</h3>
+        <div class="movelist" id="v-moves"></div>
+      </aside>
+    </div>
+  </section>
+</main>
+
+<div id="modal" class="modal hidden"><div class="modal-card" id="modal-card"></div></div>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
