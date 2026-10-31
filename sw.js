@@ -1,7 +1,7 @@
 // Service worker: lets the game open offline and install as an app.
 // Static files are cached on install. Pages and scripts are fetched network-first (so updates
 // arrive as soon as you are online); images, the chess engine and libraries are cache-first.
-const VERSION = 'gunmetal-v2';
+const VERSION = 'gunmetal-v3';
 const CORE = [
   './', 'index.html', 'style.css', 'manifest.webmanifest', 'favicon.ico', 'icons/favicon-32.png', 'icons/favicon-16.png',
   'js/app.js', 'js/board.js', 'js/engine.js', 'js/effects.js', 'js/games.js', 'js/i18n.js', 'js/ui.js',
@@ -28,6 +28,6 @@ self.addEventListener('fetch', (e) => {
     e.respondWith(caches.match(req).then((hit) => hit || fetch(req).then((res) => { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(req, copy)); return res; })));
     return;
   }
-  e.respondWith(fetch(req).then((res) => { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(req, copy)); return res; })
+  e.respondWith(fetch(req, { cache: 'no-cache' }).then((res) => { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(req, copy)); return res; })
     .catch(() => caches.match(req).then((hit) => hit || caches.match('index.html'))));
 });

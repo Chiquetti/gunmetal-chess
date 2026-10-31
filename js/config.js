@@ -5,7 +5,7 @@
 //         Uses consent mode and shows a small consent bar to the visitor.
 //  - goatcounter: site code of a free GoatCounter account (cookie-free alternative).
 export const CONFIG = {
-  ga4: '',
+  ga4: 'G-Z22P9R0E8X',
   goatcounter: '',
   // WORLDWIDE RANKING (optional): a free Supabase project. See projetos/xadrez-sogro/supabase-setup.sql.
   // supabaseUrl like 'https://abcd1234.supabase.co', supabaseKey is the project's public "anon" key.
