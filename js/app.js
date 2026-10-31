@@ -9,13 +9,14 @@ import { analyticsOn, trackView, trackEvent, initConsent } from './analytics.js'
 import { enterOnline, refreshOnline } from './online.js';
 import { getPlayer, recordResult, localBoard, globalBoard, globalOn } from './player.js';
 import { ensureProfile, askName, paintChip } from './profile-ui.js';
+import { enterLearn, refreshLearn } from './learn.js';
 
 const SAVE_KEY = 'gunmetal.game.v1';
 const strip = (s) => s.replace(/[!?+#]+$/g, '');
 const lvLabel = (k) => t('lv.' + k);
 
 /* ---------------- router ---------------- */
-const views = ['home', 'play', 'online', 'ranking', 'library', 'viewer'];
+const views = ['home', 'play', 'online', 'ranking', 'learn', 'library', 'viewer'];
 let currentView = 'home';
 function show(name) {
   currentView = name;
@@ -30,6 +31,7 @@ function route() {
   if (h.startsWith('join/')) { show('online'); enterOnline(h.slice(5)); return; }
   if (h === 'online') { show('online'); enterOnline(); return; }
   if (h === 'ranking') { show('ranking'); renderRanking(); return; }
+  if (h === 'learn') { show('learn'); enterLearn(); return; }
   if (h === 'play') { show('play'); enterPlay(); return; }
   if (h === 'library') { show('library'); renderLibrary(); return; }
   show('home'); refreshHome();
@@ -638,19 +640,28 @@ sndBtn.onclick = () => { setSoundOn(!isSoundOn()); paintSnd(); };
 
 const langBox = $('#lang');
 function paintLangs() {
-  langBox.innerHTML = LANGS.map(([code, short, name]) => `<button class="lbtn ${code === getLang() ? 'on' : ''}" data-l="${code}" title="${name}" aria-label="${name}">${short}</button>`).join('');
+  const cur = LANGS.find((l) => l[0] === getLang());
+  langBox.innerHTML = `<button class="lang-btn" id="lang-btn" aria-haspopup="true" aria-expanded="false">${cur[1]} <span class="car">&#9662;</span></button>` +
+    `<div class="lang-menu" id="lang-menu" hidden>${LANGS.map(([c, s, n]) => `<button class="lang-item ${c === getLang() ? 'on' : ''}" data-l="${c}"><b>${s}</b><span>${n}</span></button>`).join('')}</div>`;
 }
 paintLangs();
 langBox.onclick = async (e) => {
+  if (e.target.closest('#lang-btn')) {
+    const menu = $('#lang-menu'); menu.hidden = !menu.hidden;
+    $('#lang-btn').setAttribute('aria-expanded', String(!menu.hidden));
+    return;
+  }
   const b = e.target.closest('[data-l]');
-  if (!b || b.dataset.l === getLang()) return;
+  if (!b) return;
   const l = b.dataset.l;
+  if (l === getLang()) { $('#lang-menu').hidden = true; return; }
   setLang(l);
   await loadContent(l);
   paintLangs();
   trackEvent('lang-' + l, 'Language: ' + l);
   relocalize();
 };
+document.addEventListener('click', (e) => { if (!langBox.contains(e.target)) { const m = $('#lang-menu'); if (m) m.hidden = true; } });
 
 /** Re-render the current screen after a language change (keeps the position in a famous game). */
 function relocalize() {
@@ -663,6 +674,7 @@ function relocalize() {
   else if (currentView === 'viewer') { const keep = V.idx; localizeViewer(); if (V.mode === 'watch') goTo(keep); else renderViewer(); }
   else if (currentView === 'online') refreshOnline();
   else if (currentView === 'ranking') renderRanking();
+  else if (currentView === 'learn') refreshLearn();
   paintChip();
   if (!$('#modal').classList.contains('hidden')) closeModal();
 }
@@ -678,6 +690,23 @@ $('#share').onclick = async () => {
   trackEvent('share', 'Share');
 };
 if (analyticsOn) $('#ft-stats').hidden = false;
+
+/* ================= install as an app (PWA) ================= */
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  navigator.serviceWorker.register('sw.js').catch(() => { /* offline mode is optional */ });
+}
+let installEvent = null;
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvent = e; $('#install').hidden = false; });
+$('#install').onclick = async () => {
+  if (!installEvent) return;
+  installEvent.prompt();
+  await installEvent.userChoice.catch(() => null);
+  installEvent = null; $('#install').hidden = true; trackEvent('pwa-install', 'App installed');
+};
+window.addEventListener('appinstalled', () => { $('#install').hidden = true; });
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isStandalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+if (isIOS && !isStandalone) $('#ios-hint').hidden = false;
 
 /* ================= boot ================= */
 async function boot() {

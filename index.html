@@ -8,6 +8,11 @@
 <meta property="og:title" content="Gunmetal Chess">
 <meta property="og:description" content="Chess with gun-shaped pieces. Play the computer, play a friend online, study famous games.">
 <link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#14110e">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Gunmetal Chess">
 </head>
 <body>
 <header class="top">
@@ -17,6 +22,7 @@
     <a href="#play" data-nav="play" data-i18n="nav.play">Play</a>
     <a href="#online" data-nav="online" data-i18n="nav.online">Play a Friend</a>
     <a href="#library" data-nav="library" data-i18n="nav.library">Famous Games</a>
+    <a href="#learn" data-nav="learn" data-i18n="nav.learn">Learn</a>
     <a href="#ranking" data-nav="ranking" data-i18n="nav.ranking">Ranking</a>
     <button class="chip me" id="me-chip"></button>
     <div id="lang" class="langs" role="group" aria-label="Language"></div>
@@ -122,6 +128,56 @@
     </div>
   </section>
 
+  <!-- LEARN -->
+  <section id="view-learn" class="view hidden">
+    <h2 class="page-title" data-i18n="ln.title">Learn</h2>
+    <p class="page-sub" data-i18n="ln.sub"></p>
+    <div class="mode-row" style="margin:16px 0">
+      <button class="btn mode on" id="ln-t-pieces" data-i18n="ln.tab.pieces">The pieces</button>
+      <button class="btn mode" id="ln-t-rules" data-i18n="ln.tab.rules">Special rules</button>
+      <button class="btn mode" id="ln-t-puzzles" data-i18n="ln.tab.puzzles">Puzzles</button>
+    </div>
+
+    <div id="ln-pieces">
+      <div class="layout">
+        <div class="board-col"><div id="board-learn" class="noclick"></div></div>
+        <aside class="panel">
+          <p class="note" style="margin:0 0 10px" data-i18n="ln.pick"></p>
+          <div class="piece-pick" id="ln-pick"></div>
+          <div id="ln-info"></div>
+        </aside>
+      </div>
+    </div>
+
+    <div id="ln-rules" hidden></div>
+
+    <div id="ln-puzzles" hidden>
+      <div id="pz-list-wrap">
+        <h3 class="sec" style="margin-top:0" data-i18n="pz.title">Puzzles from famous games</h3>
+        <p class="page-sub" data-i18n="pz.sub"></p>
+        <div class="lib-count" id="pz-progress"></div>
+        <div class="pz-grid" id="pz-list"></div>
+      </div>
+      <div id="pz-play" hidden>
+        <div class="layout">
+          <div class="board-col"><div id="board-puzzle"></div></div>
+          <aside class="panel">
+            <button class="back linkbtn" id="pz-back" data-i18n="pz.back">&larr; All puzzles</button>
+            <h2 id="pz-title"></h2>
+            <div class="meta" id="pz-from"></div>
+            <div class="coach" id="pz-msg"></div>
+            <div class="btn-row">
+              <button class="btn" id="pz-hint" data-i18n="pz.hint">Hint</button>
+              <button class="btn" id="pz-show" data-i18n="pz.solution">Show solution</button>
+              <button class="btn" id="pz-restart" data-i18n="pz.restart">Restart</button>
+              <button class="btn primary" id="pz-next" data-i18n="pz.next" hidden>Next puzzle</button>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- RANKING -->
   <section id="view-ranking" class="view hidden">
     <h2 class="page-title" data-i18n="rk.title">Ranking</h2>
@@ -207,6 +263,8 @@
 
 <footer class="foot">
   <button class="link" id="share" data-i18n="ft.share">Share this game</button>
+  <button class="link" id="install" data-i18n="pwa.install" hidden>Install the app</button>
+  <span id="ios-hint" data-i18n="pwa.ios" hidden></span>
   <span id="ft-stats" data-i18n="ft.stats" hidden></span>
 </footer>
 
