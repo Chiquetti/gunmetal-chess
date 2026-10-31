@@ -1,6 +1,6 @@
 // UI translations (English, Brazilian Portuguese, French). Each entry is [en, pt, fr].
 // Famous-game content (titles, stories, comments) lives in js/i18n/games.<lang>.js and is loaded on demand.
-export const LANGS = [['en', 'EN', 'English'], ['pt', 'PT', 'Português (BR)'], ['fr', 'FR', 'Français'], ['es', 'ES', 'Español']];
+export const LANGS = [['en', 'EN', 'English'], ['pt', 'PT', 'Português'], ['fr', 'FR', 'Français'], ['es', 'ES', 'Español']];
 const IDX = { en: 0, pt: 1, fr: 2, es: 3 };
 
 const D = {
@@ -343,14 +343,11 @@ const D = {
   'on.moves': ['Moves', 'Lances', 'Coups']
 };
 
+// Always starts in English. A language the visitor picked earlier is remembered.
 let lang = 'en';
 try {
   const saved = localStorage.getItem('gunmetal.lang');
   if (saved && IDX[saved] !== undefined) lang = saved;
-  else {
-    const nav = (navigator.language || 'en').toLowerCase();
-    lang = nav.startsWith('pt') ? 'pt' : nav.startsWith('fr') ? 'fr' : nav.startsWith('es') ? 'es' : 'en';
-  }
 } catch (e) { /* keep default */ }
 
 export const getLang = () => lang;

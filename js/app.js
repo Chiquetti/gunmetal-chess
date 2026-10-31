@@ -638,30 +638,16 @@ const sndBtn = $('#snd');
 const paintSnd = () => { sndBtn.textContent = isSoundOn() ? t('sound.on') : t('sound.off'); };
 sndBtn.onclick = () => { setSoundOn(!isSoundOn()); paintSnd(); };
 
-const langBox = $('#lang');
-function paintLangs() {
-  const cur = LANGS.find((l) => l[0] === getLang());
-  langBox.innerHTML = `<button class="lang-btn" id="lang-btn" aria-haspopup="true" aria-expanded="false">${cur[1]} <span class="car">&#9662;</span></button>` +
-    `<div class="lang-menu" id="lang-menu" hidden>${LANGS.map(([c, s, n]) => `<button class="lang-item ${c === getLang() ? 'on' : ''}" data-l="${c}"><b>${s}</b><span>${n}</span></button>`).join('')}</div>`;
-}
-paintLangs();
-langBox.onclick = async (e) => {
-  if (e.target.closest('#lang-btn')) {
-    const menu = $('#lang-menu'); menu.hidden = !menu.hidden;
-    $('#lang-btn').setAttribute('aria-expanded', String(!menu.hidden));
-    return;
-  }
-  const b = e.target.closest('[data-l]');
-  if (!b) return;
-  const l = b.dataset.l;
-  if (l === getLang()) { $('#lang-menu').hidden = true; return; }
+const langSel = $('#lang');
+langSel.innerHTML = LANGS.map(([code, , name]) => `<option value="${code}">${name}</option>`).join('');
+langSel.value = getLang();
+langSel.onchange = async () => {
+  const l = langSel.value;
   setLang(l);
   await loadContent(l);
-  paintLangs();
   trackEvent('lang-' + l, 'Language: ' + l);
   relocalize();
 };
-document.addEventListener('click', (e) => { if (!langBox.contains(e.target)) { const m = $('#lang-menu'); if (m) m.hidden = true; } });
 
 /** Re-render the current screen after a language change (keeps the position in a famous game). */
 function relocalize() {
