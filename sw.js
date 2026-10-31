@@ -1,9 +1,9 @@
 // Service worker: lets the game open offline and install as an app.
 // Static files are cached on install. Pages and scripts are fetched network-first (so updates
 // arrive as soon as you are online); images, the chess engine and libraries are cache-first.
-const VERSION = 'gunmetal-v1';
+const VERSION = 'gunmetal-v2';
 const CORE = [
-  './', 'index.html', 'style.css', 'manifest.webmanifest',
+  './', 'index.html', 'style.css', 'manifest.webmanifest', 'favicon.ico', 'icons/favicon-32.png', 'icons/favicon-16.png',
   'js/app.js', 'js/board.js', 'js/engine.js', 'js/effects.js', 'js/games.js', 'js/i18n.js', 'js/ui.js',
   'js/online.js', 'js/player.js', 'js/profile-ui.js', 'js/analytics.js', 'js/config.js', 'js/learn.js',
   'js/i18n/games.pt.js', 'js/i18n/games.fr.js', 'js/i18n/games.es.js', 'js/i18n/ui.es.js',
