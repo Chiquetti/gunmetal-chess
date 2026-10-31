@@ -1,7 +1,7 @@
 import { Chess } from '../lib/chess.js';
 import { Board } from './board.js';
 import { Engine, LEVELS } from './engine.js';
-import { GAMES } from './games.js';
+import { GAMES as BASE_GAMES, COLLECTIONS, LEGENDS } from './games.js';
 import { Effects, isSoundOn, setSoundOn } from './effects.js';
 
 const $ = (s) => document.querySelector(s);
@@ -28,7 +28,7 @@ function route() {
   stopAutoplay();
   if (h.startsWith('game/')) { openViewer(h.slice(5)); return; }
   if (h === 'play') { show('play'); enterPlay(); return; }
-  if (h === 'library') { show('library'); return; }
+  if (h === 'library') { show('library'); renderLibrary(); return; }
   show('home'); refreshHome();
 }
 window.addEventListener('hashchange', route);
@@ -251,18 +251,203 @@ function renderMoves(el, sans, curIdx, commentSet, clickable) {
 }
 
 /* ================= LIBRARY ================= */
-function buildLibrary() {
-  $('#lib-grid').innerHTML = GAMES.map((g) => `
-    <button class="g-card" data-id="${g.id}">
-      <span class="badge ${g.level}">${g.level}</span>
-      <h3>${g.title}</h3>
-      <div class="pl">${g.white} <span style="color:var(--muted)">vs</span> ${g.black}</div>
-      <div class="ev">${g.event}${g.year ? ', ' + g.year : ''}</div>
-      <p>${g.intro.split('. ')[0]}.</p>
-      <div class="tags">${g.tags.map((t) => `<span class="tag">${t}</span>`).join('')}</div>
-    </button>`).join('');
+const LS = {
+  get(k, d) { try { const v = JSON.parse(localStorage.getItem(k)); return v === null || v === undefined ? d : v; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* ignore */ } }
+};
+let imported = LS.get('gunmetal.imported', []);
+const favs = new Set(LS.get('gunmetal.fav', []));
+const done = new Set(LS.get('gunmetal.done', []));
+const saveFavs = () => LS.set('gunmetal.fav', [...favs]);
+const saveDone = () => LS.set('gunmetal.done', [...done]);
+
+const LEVEL_RANK = { Beginner: 0, Intermediate: 1, Advanced: 2, Custom: 3 };
+const FIRST_LABEL = { '1.e4': '1.e4 (King\'s pawn)', '1.d4': '1.d4 (Queen\'s pawn)', Flank: 'Flank (1.c4 / 1.Nf3)', Other: 'Other first moves' };
+const RESULT_LABEL = { w: 'White wins', b: 'Black wins', d: 'Draw' };
+const resultKey = (r) => (r === '1-0' ? 'w' : r === '0-1' ? 'b' : r === '1/2-1/2' ? 'd' : '');
+
+function prep(g) {
+  const c = new Chess();
+  try { c.loadPgn(g.pgn); } catch (e) { return null; }
+  const h = c.history();
+  const first = h[0] === 'e4' ? '1.e4' : h[0] === 'd4' ? '1.d4' : (h[0] === 'c4' || h[0] === 'Nf3') ? 'Flank' : 'Other';
+  const themes = new Set(g.tags || []);
+  if (Math.ceil(h.length / 2) <= 25 && c.isCheckmate()) themes.add('Miniature');
+  if (c.isCheckmate()) themes.add('Mate');
+  return { ...g, plies: h.length, moveCount: Math.ceil(h.length / 2), mate: c.isCheckmate(), first, themes: [...themes] };
 }
-$('#lib-grid').onclick = (e) => { const b = e.target.closest('[data-id]'); if (b) location.hash = '#game/' + b.dataset.id; };
+let GAMES = [];
+function rebuildGames() {
+  GAMES = [...BASE_GAMES, ...imported].map(prep).filter(Boolean);
+}
+rebuildGames();
+
+const L = { q: '', level: '', era: '', theme: '', player: '', result: '', first: '', sort: 'rec', fav: false, collection: '' };
+
+function fillSelect(id, first, items) {
+  const el = $(id);
+  const cur = el.value;
+  el.innerHTML = `<option value="">${first}</option>` + items.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
+  el.value = cur;
+}
+function setupFilters() {
+  const levels = ['Beginner', 'Intermediate', 'Advanced', ...(GAMES.some((g) => g.level === 'Custom') ? ['Custom'] : [])];
+  fillSelect('#f-level', 'All levels', levels.map((x) => [x, x]));
+  const eras = ['Timeless', 'Romantic', 'Classical', 'Modern', ...(GAMES.some((g) => g.era === 'Custom') ? ['Custom'] : [])];
+  fillSelect('#f-era', 'All eras', eras.map((x) => [x, x]));
+  const themes = [...new Set(GAMES.flatMap((g) => g.themes))].sort();
+  fillSelect('#f-theme', 'All themes', themes.map((x) => [x, x]));
+  const players = [...new Set(GAMES.flatMap((g) => g.players || []))].sort();
+  fillSelect('#f-player', 'All players', players.map((x) => [x, x]));
+  fillSelect('#f-result', 'All results', Object.entries(RESULT_LABEL));
+  fillSelect('#f-first', 'Any first move', Object.entries(FIRST_LABEL));
+  const sortEl = $('#f-sort');
+  if (!sortEl.options.length) {
+    sortEl.innerHTML = [['rec', 'Sort: Recommended'], ['easy', 'Easiest first'], ['hard', 'Hardest first'], ['old', 'Oldest first'], ['new', 'Newest first'], ['short', 'Shortest first'], ['long', 'Longest first'], ['az', 'A to Z']]
+      .map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
+  }
+}
+
+function filteredGames() {
+  const q = L.q.trim().toLowerCase();
+  const col = L.collection ? COLLECTIONS.find((c) => c.id === L.collection) : null;
+  const list = GAMES.filter((g) => {
+    if (L.level && g.level !== L.level) return false;
+    if (L.era && g.era !== L.era) return false;
+    if (L.theme && !g.themes.includes(L.theme)) return false;
+    if (L.player && !(g.players || []).includes(L.player)) return false;
+    if (L.result && resultKey(g.result) !== L.result) return false;
+    if (L.first && g.first !== L.first) return false;
+    if (L.fav && !favs.has(g.id)) return false;
+    if (col && !col.games.includes(g.id)) return false;
+    if (q) {
+      const hay = [g.title, g.white, g.black, g.event, g.year, g.opening, g.level, g.era, g.themes.join(' '), g.intro, (g.story || []).join(' ')].join(' ').toLowerCase();
+      if (!q.split(/\s+/).every((w) => hay.includes(w))) return false;
+    }
+    return true;
+  });
+  const yr = (g) => parseInt(g.year, 10) || 0;
+  const idx = (g) => GAMES.indexOf(g);
+  const sorts = {
+    rec: (a, b) => idx(a) - idx(b),
+    easy: (a, b) => LEVEL_RANK[a.level] - LEVEL_RANK[b.level] || idx(a) - idx(b),
+    hard: (a, b) => LEVEL_RANK[b.level] - LEVEL_RANK[a.level] || idx(a) - idx(b),
+    old: (a, b) => yr(a) - yr(b), new: (a, b) => yr(b) - yr(a),
+    short: (a, b) => a.moveCount - b.moveCount, long: (a, b) => b.moveCount - a.moveCount,
+    az: (a, b) => a.title.localeCompare(b.title)
+  };
+  return list.sort(sorts[L.sort] || sorts.rec);
+}
+
+function renderLibrary() {
+  setupFilters();
+  const list = filteredGames();
+  const col = L.collection ? COLLECTIONS.find((c) => c.id === L.collection) : null;
+  $('#lib-count').innerHTML = `Showing <b>${list.length}</b> of ${GAMES.length} games` +
+    (col ? ` &middot; Collection: <b>${col.title}</b> <button class="link" id="clr-col">remove</button>` : '');
+  $('#f-fav').classList.toggle('on', L.fav);
+  $('#lib-grid').innerHTML = list.length ? list.map(cardHtml).join('') :
+    `<div class="empty">No games match these filters. Try clearing a filter or searching for something else.</div>`;
+  $('#collections').innerHTML = COLLECTIONS.map((c) => `
+    <button class="col-card ${L.collection === c.id ? 'on' : ''}" data-col="${c.id}">
+      <b>${c.title}</b><span>${c.blurb}</span><em>${c.games.length} games</em>
+    </button>`).join('');
+  $('#legends').innerHTML = LEGENDS.map((p) => {
+    const n = GAMES.filter((g) => (g.players || []).includes(p.name)).length;
+    return `<div class="legend"><div class="lg-name">${p.name}</div><div class="lg-line">${p.line}</div>
+      <div class="lg-meta">${p.years} &middot; ${p.from}</div><p>${p.bio}</p>
+      ${n ? `<button class="btn" data-player="${p.name}">${n} game${n > 1 ? 's' : ''} in library</button>` : ''}</div>`;
+  }).join('');
+}
+
+function cardHtml(g) {
+  const isFav = favs.has(g.id), isDone = done.has(g.id);
+  const when = [g.era && g.era !== 'Custom' ? g.era : '', g.year].filter(Boolean).join(' &middot; ');
+  return `<div class="g-card" data-id="${g.id}" tabindex="0">
+    <div class="g-head"><span class="badge ${g.level}">${g.level}</span><span class="g-era">${when}</span>
+      <button class="fav-btn ${isFav ? 'on' : ''}" data-fav="${g.id}" title="${isFav ? 'Remove from favorites' : 'Add to favorites'}">${isFav ? '&#9733;' : '&#9734;'}</button></div>
+    <h3>${g.title}</h3>
+    <div class="pl">${g.white} <span style="color:var(--muted)">vs</span> ${g.black}</div>
+    <div class="ev">${[g.event, g.opening].filter(Boolean).join(' &middot; ')}</div>
+    <p>${(g.intro || '').split('. ')[0].replace(/\.$/, '')}.</p>
+    <div class="tags"><span class="tag">${g.moveCount} moves</span><span class="tag">${RESULT_LABEL[resultKey(g.result)] || 'Result ' + g.result}</span>
+      ${g.themes.slice(0, 3).map((t) => `<span class="tag">${t}</span>`).join('')}${g.story && g.story.length ? '<span class="tag story">Story</span>' : ''}${isDone ? '<span class="tag done">Watched &#10003;</span>' : ''}</div>
+  </div>`;
+}
+
+function scrollToGrid() { $('#lib-count').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+
+$('#lib-grid').onclick = (e) => {
+  const fav = e.target.closest('[data-fav]');
+  if (fav) { toggleFav(fav.dataset.fav); renderLibrary(); return; }
+  const b = e.target.closest('[data-id]');
+  if (b) location.hash = '#game/' + b.dataset.id;
+};
+$('#lib-grid').onkeydown = (e) => { if (e.key === 'Enter') { const b = e.target.closest('[data-id]'); if (b) location.hash = '#game/' + b.dataset.id; } };
+$('#collections').onclick = (e) => {
+  const b = e.target.closest('[data-col]'); if (!b) return;
+  L.collection = L.collection === b.dataset.col ? '' : b.dataset.col;
+  renderLibrary(); if (L.collection) scrollToGrid();
+};
+$('#lib-count').onclick = (e) => { if (e.target.id === 'clr-col') { L.collection = ''; renderLibrary(); } };
+$('#legends').onclick = (e) => {
+  const b = e.target.closest('[data-player]'); if (!b) return;
+  Object.assign(L, { q: '', level: '', era: '', theme: '', result: '', first: '', fav: false, collection: '', player: b.dataset.player });
+  syncControls(); renderLibrary(); scrollToGrid();
+};
+function syncControls() {
+  $('#lib-search').value = L.q;
+  ['level', 'era', 'theme', 'player', 'result', 'first', 'sort'].forEach((k) => { $('#f-' + k).value = L[k]; });
+}
+$('#lib-search').oninput = (e) => { L.q = e.target.value; renderLibrary(); };
+['level', 'era', 'theme', 'player', 'result', 'first', 'sort'].forEach((k) => {
+  $('#f-' + k).onchange = (e) => { L[k] = e.target.value; renderLibrary(); };
+});
+$('#f-fav').onclick = () => { L.fav = !L.fav; renderLibrary(); };
+$('#f-clear').onclick = () => {
+  Object.assign(L, { q: '', level: '', era: '', theme: '', player: '', result: '', first: '', sort: 'rec', fav: false, collection: '' });
+  renderLibrary(); syncControls();
+};
+
+function toggleFav(id) {
+  if (favs.has(id)) favs.delete(id); else favs.add(id);
+  saveFavs();
+}
+function markDone(id) {
+  if (!done.has(id)) { done.add(id); saveDone(); }
+}
+
+/* ---- import a game ---- */
+$('#btn-import').onclick = () => {
+  openModal(`<h2>Import a game</h2>
+    <p class="sub">Paste a game in PGN format (chess.com and Lichess both let you copy it). It is saved only in this browser.</p>
+    <input id="imp-title" class="field" placeholder="Title (optional)">
+    <textarea id="imp-pgn" class="field" rows="8" placeholder='[Event "My game"]&#10;[White "Me"]&#10;[Black "Computer"]&#10;&#10;1. e4 e5 2. Nf3 Nc6 ...'></textarea>
+    <div class="imp-msg" id="imp-msg"></div>
+    <div class="modal-actions"><button class="btn" id="imp-cancel">Cancel</button><button class="btn primary" id="imp-save">Import</button></div>`);
+  $('#imp-cancel').onclick = closeModal;
+  $('#imp-save').onclick = () => {
+    const text = $('#imp-pgn').value.trim();
+    const c = new Chess();
+    try { c.loadPgn(text); } catch (e) { $('#imp-msg').textContent = 'That does not look like a valid PGN. Check the moves and try again.'; return; }
+    if (!c.history().length) { $('#imp-msg').textContent = 'No moves found in that text.'; return; }
+    let h = {};
+    try { h = c.header() || {}; } catch (e) { h = {}; }
+    const clean = (s, d) => (s && s !== '?' ? s : d);
+    const white = clean(h.White, 'White'), black = clean(h.Black, 'Black');
+    const year = (h.Date || '').slice(0, 4);
+    imported.push({
+      id: 'imp-' + Date.now().toString(36),
+      title: $('#imp-title').value.trim() || `${white} vs ${black}`,
+      white, black, event: clean(h.Event, 'Imported game'), year: /^\d{4}$/.test(year) ? year : '', era: 'Custom',
+      result: clean(h.Result, '*'), level: 'Custom', opening: clean(h.Opening, ''), players: [white, black].filter((n) => n !== 'White' && n !== 'Black'),
+      tags: ['Imported'], intro: 'Your imported game. Step through the moves, or switch to Guess the move to test yourself.', lesson: '', story: [], pgn: text, comments: {}, imported: true
+    });
+    LS.set('gunmetal.imported', imported);
+    rebuildGames(); closeModal(); renderLibrary();
+    location.hash = '#game/' + imported.at(-1).id;
+  };
+};
 
 /* ================= GAME VIEWER ================= */
 const V = { game: null, moves: [], fens: [], comments: new Map(), idx: 0, mode: 'watch', side: 'w', timer: null, tries: 0, firstTry: 0, hinted: false, guessable: 0, busy: false };
@@ -282,7 +467,7 @@ function openViewer(id) {
   V.game = g;
   const c = new Chess(); c.loadPgn(g.pgn);
   V.moves = c.history({ verbose: true });
-  V.fens = [new Chess().fen(), ...V.moves.map((m) => m.after)];
+  V.fens = [V.moves.length ? V.moves[0].before : new Chess().fen(), ...V.moves.map((m) => m.after)];
   V.comments = new Map();
   const norm = new Map(Object.entries(g.comments).map(([k, v]) => [strip(k), v]));
   V.moves.forEach((m, i) => {
@@ -292,7 +477,14 @@ function openViewer(id) {
   V.idx = 0; V.mode = 'watch'; V.side = 'w'; V.tries = 0; V.firstTry = 0; V.busy = false;
   boardView.flipped = false; boardView.build();
   $('#v-title').textContent = g.title;
-  $('#v-meta').innerHTML = `<b>${g.white}</b> vs <b>${g.black}</b><br>${g.event}${g.year ? ', ' + g.year : ''} &middot; Result ${g.result} &middot; ${g.level}`;
+  $('#v-meta').innerHTML = `<b>${g.white}</b> vs <b>${g.black}</b><br>${g.event}${g.year ? ', ' + g.year : ''} &middot; Result ${g.result} &middot; ${g.level}` +
+    `<br>${[g.opening, g.moveCount + ' moves'].filter(Boolean).join(' &middot; ')}`;
+  const hasStory = g.story && g.story.length;
+  $('#v-story').hidden = !hasStory;
+  $('#v-story').open = false;
+  $('#v-story-body').innerHTML = hasStory ? g.story.map((p) => `<p>${p}</p>`).join('') : '';
+  $('#v-remove').hidden = !g.imported;
+  paintFav();
   setMode('watch');
 }
 
@@ -314,7 +506,10 @@ function renderViewer(extraHtml = '', fxMove = null) {
   else {
     const i = V.idx - 1;
     html = `<div class="mv">${moveLabel(i)}</div>${V.comments.get(i) || '<span style="color:var(--muted)">A natural move that continues the plan.</span>'}`;
-    if (V.idx === V.moves.length) html += `<hr style="border:0;border-top:1px solid var(--line);margin:10px 0"><b>Result ${V.game.result}.</b> ${V.game.lesson}`;
+    if (V.idx === V.moves.length) {
+      html += `<hr style="border:0;border-top:1px solid var(--line);margin:10px 0"><b>Result ${V.game.result}.</b> ${V.game.lesson || ''}`;
+      markDone(V.game.id);
+    }
   }
   $('#v-coach').innerHTML = extraHtml + html;
   $('#v-first').disabled = $('#v-prev').disabled = V.idx === 0 || V.mode === 'guess';
@@ -382,7 +577,8 @@ async function guessAdvance() {
   }
   V.busy = false;
   if (V.idx >= V.moves.length) {
-    const msg = `<div class="mv">Game complete</div>You found <b>${V.firstTry}</b> of <b>${V.guessable}</b> moves on the first try.<hr style="border:0;border-top:1px solid var(--line);margin:10px 0">${V.game.lesson}`;
+    markDone(V.game.id);
+    const msg = `<div class="mv">Game complete</div>You found <b>${V.firstTry}</b> of <b>${V.guessable}</b> moves on the first try.<hr style="border:0;border-top:1px solid var(--line);margin:10px 0">${V.game.lesson || ''}`;
     $('#v-coach').innerHTML = msg;
   }
 }
@@ -424,6 +620,29 @@ $('#g-show').onclick = () => {
   coachFeedback(`<div class="no"><b>The master played ${m.san}.</b> Play it on the board to continue.</div>`);
 };
 
+/* ---- viewer extras: favorite, next game, remove ---- */
+function paintFav() {
+  const on = V.game && favs.has(V.game.id);
+  $('#v-fav').innerHTML = on ? '&#9733;' : '&#9734;';
+  $('#v-fav').classList.toggle('on', !!on);
+  $('#v-fav').title = on ? 'Remove from favorites' : 'Add to favorites';
+}
+$('#v-fav').onclick = () => { toggleFav(V.game.id); paintFav(); };
+$('#v-nextgame').onclick = () => {
+  const i = GAMES.findIndex((g) => g.id === V.game.id);
+  location.hash = '#game/' + GAMES[(i + 1) % GAMES.length].id;
+};
+$('#v-remove').onclick = () => {
+  openModal(`<h2>Remove this game?</h2><p class="sub">It will be deleted from this browser.</p>
+    <div class="modal-actions"><button class="btn" id="rm-no">Cancel</button><button class="btn danger" id="rm-yes">Remove</button></div>`);
+  $('#rm-no').onclick = closeModal;
+  $('#rm-yes').onclick = () => {
+    imported = imported.filter((g) => g.id !== V.game.id);
+    LS.set('gunmetal.imported', imported); favs.delete(V.game.id); saveFavs(); rebuildGames(); closeModal();
+    location.hash = '#library';
+  };
+};
+
 /* ================= sound toggle ================= */
 const sndBtn = $('#snd');
 const paintSnd = () => { sndBtn.textContent = isSoundOn() ? 'Sound: On' : 'Sound: Off'; };
@@ -432,5 +651,4 @@ paintSnd();
 
 /* ================= boot ================= */
 $('#pieces-strip').innerHTML = ['wk', 'wq', 'wr', 'wb', 'wn', 'wp', 'bp', 'bn', 'bb', 'br', 'bq', 'bk'].map((k) => `<img src="img/${k}.png" alt="">`).join('');
-buildLibrary();
 route();

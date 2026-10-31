@@ -58,8 +58,35 @@
   <!-- LIBRARY -->
   <section id="view-library" class="view hidden">
     <h2 class="page-title">Famous Games</h2>
-    <p class="page-sub">Masters and Grandmasters, one move at a time. Watch with commentary, or test yourself by guessing the master's next move.</p>
+    <p class="page-sub">Masters and Grandmasters, one move at a time. Watch with commentary, read the story behind each game, or test yourself by guessing the master's next move.</p>
+
+    <h3 class="sec">Collections</h3>
+    <div class="collections" id="collections"></div>
+
+    <h3 class="sec">Browse all games</h3>
+    <div class="lib-tools">
+      <input id="lib-search" type="search" placeholder="Search by title, player, opening, theme or story..." autocomplete="off">
+      <div class="lib-filters">
+        <select id="f-level" aria-label="Level"></select>
+        <select id="f-era" aria-label="Era"></select>
+        <select id="f-theme" aria-label="Theme"></select>
+        <select id="f-player" aria-label="Player"></select>
+        <select id="f-result" aria-label="Result"></select>
+        <select id="f-first" aria-label="First move"></select>
+        <select id="f-sort" aria-label="Sort by"></select>
+      </div>
+      <div class="lib-actions">
+        <button class="btn" id="f-fav">&#9733; Favorites</button>
+        <button class="btn" id="f-clear">Clear filters</button>
+        <button class="btn" id="btn-import">+ Import a game</button>
+      </div>
+    </div>
+    <div class="lib-count" id="lib-count"></div>
     <div class="lib-grid" id="lib-grid"></div>
+
+    <h3 class="sec">Legends of the game</h3>
+    <p class="page-sub" style="margin-top:0">Tap a name to see every game they played in this library.</p>
+    <div class="legends" id="legends"></div>
   </section>
 
   <!-- VIEWER -->
@@ -76,7 +103,7 @@
         </div>
       </div>
       <aside class="panel">
-        <a class="back" href="#library">&larr; All games</a>
+        <div class="v-top"><a class="back" href="#library">&larr; All games</a><button class="fav-btn" id="v-fav" title="Add to favorites">&#9734;</button></div>
         <h2 id="v-title"></h2>
         <div class="meta" id="v-meta"></div>
         <div class="mode-row">
@@ -89,8 +116,10 @@
           <button class="btn" id="g-show">Show move</button>
           <button class="btn" id="g-side">Playing: White</button>
         </div>
+        <details class="story" id="v-story"><summary>The story behind this game</summary><div id="v-story-body"></div></details>
         <h3>Moves</h3>
         <div class="movelist" id="v-moves"></div>
+        <div class="btn-row" style="margin-top:14px"><button class="btn" id="v-nextgame">Next game &rarr;</button><button class="btn danger" id="v-remove" hidden>Remove imported game</button></div>
       </aside>
     </div>
   </section>
