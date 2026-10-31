@@ -104,3 +104,18 @@ function openRestore(resolve) {
     paintChip(); closeModal(); resolve(getPlayer());
   };
 }
+
+/**
+ * When the worldwide ranking is on, a player who already has a name on this device (made before it was on)
+ * gets that name reserved automatically. If someone else took it meanwhile, ask for another one.
+ */
+export async function claimIfNeeded() {
+  const me = getPlayer();
+  if (!globalOn || !me || me.claimed) return;
+  const res = await registerName(me.name);
+  if (res.ok && res.newlyClaimed) { showCode(() => {}); return; }
+  if (!res.ok && (res.reason === 'taken' || res.reason === 'invalid')) {
+    askName(true);
+    const m = $('#pf-msg'); if (m) m.textContent = t('pf.taken');
+  }
+}

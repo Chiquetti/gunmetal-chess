@@ -79,7 +79,7 @@ export async function registerName(name) {
     p.claimed = true;
   }
   saveProfile(p);
-  return { ok: true, newlyClaimed: globalOn && !existing };
+  return { ok: true, newlyClaimed: globalOn && !(existing && existing.claimed) };
 }
 
 /** Use a ranking name from another device with its recovery code. */

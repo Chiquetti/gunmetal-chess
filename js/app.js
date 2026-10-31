@@ -8,7 +8,7 @@ import { $, esc, sleep, openModal, closeModal, askPromotion, capsHtml, capturedB
 import { analyticsOn, trackView, trackEvent, initConsent } from './analytics.js';
 import { enterOnline, refreshOnline } from './online.js';
 import { getPlayer, recordResult, localBoard, globalBoard, globalOn } from './player.js';
-import { ensureProfile, askName, paintChip } from './profile-ui.js';
+import { ensureProfile, askName, paintChip, claimIfNeeded } from './profile-ui.js';
 import { enterLearn, refreshLearn } from './learn.js';
 
 const SAVE_KEY = 'gunmetal.game.v1';
@@ -702,6 +702,7 @@ async function boot() {
   paintSnd();
   paintChip();
   initConsent();
+  claimIfNeeded();
   $('#pieces-strip').innerHTML = ['wk', 'wq', 'wr', 'wb', 'wn', 'wp', 'bp', 'bn', 'bb', 'br', 'bq', 'bk'].map((k) => `<img src="img/${k}.png" alt="">`).join('');
   route();
 }
