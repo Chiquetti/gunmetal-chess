@@ -9,6 +9,6 @@ export const CONFIG = {
   goatcounter: '',
   // WORLDWIDE RANKING (optional): a free Supabase project. See projetos/xadrez-sogro/supabase-setup.sql.
   // supabaseUrl like 'https://abcd1234.supabase.co', supabaseKey is the project's public "anon" key.
-  supabaseUrl: '',
-  supabaseKey: ''
+  supabaseUrl: 'https://uhkaiubpujkldgdigray.supabase.co',
+  supabaseKey: 'sb_publishable_IGOBqJhPZFZE58VkUHZV1Q_Bd0RCqZw'
 };
