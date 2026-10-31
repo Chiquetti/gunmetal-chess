@@ -618,6 +618,7 @@ async function renderRanking() {
   $('#rk-local').classList.toggle('on', rkTab === 'local');
   $('#rk-global').classList.toggle('on', rkTab === 'global');
   const box = $('#rk-table');
+  $('#rk-note').hidden = globalOn;
   let rows = [];
   if (rkTab === 'global' && globalOn) {
     box.innerHTML = `<div class="empty">${t('rk.loading')}</div>`;
